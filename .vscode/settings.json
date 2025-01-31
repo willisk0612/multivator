@@ -1,0 +1,21 @@
+{
+    "go.lintTool": "golangci-lint",
+    "go.formatTool": "goimports",
+    "explorer.compactFolders": false,
+    "scm.compactFolders": false,
+    "code-runner.ignoreSelection": true,
+    "runTerminalCommand.commands": [
+        {
+            "command": "go run ${file}",
+            "name": "Run Go File"
+        },
+        {
+            "command": "goimports -w .",
+            "name": "Format Go Files"
+        },
+        {
+            "command": "golangci-lint run",
+            "name": "Check Go code for issues"
+        }
+    ],
+}

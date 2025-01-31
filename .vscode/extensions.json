@@ -1,0 +1,8 @@
+{
+    "recommendations": [
+        "golang.go",
+        "formulahendry.code-runner",
+        "adrianwilczynski.terminal-commands",
+        "nguyenngoclong.terminal-keeper"
+    ]
+}
