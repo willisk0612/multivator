@@ -1,27 +1,27 @@
 {
-    "$schema": "https://cdn.statically.io/gh/nguyenngoclongdev/cdn/main/schema/v10/terminal-keeper.json",
-    "theme": "tribe",
-    "active": "default",
-    "activateOnStartup": true,
-    "keepExistingTerminals": false,
-    "sessions": {
-        "default": [
-            [
-                {
-                    "name": "Simulator",
-                    "autoExecuteCommands": true,
-                    "commands": [
-                        "cd lib/simulator && ./SimElevatorServer.exe"
-                    ]
-                },
-                {
-                    "name": "main.go",
-                    "autoExecuteCommands": true,
-                    "commands": [
-                        "cd src && go run ."
-                    ]
-                }
-            ]
-        ]
-    }
+  "$schema": "https://cdn.statically.io/gh/nguyenngoclongdev/cdn/main/schema/v10/terminal-keeper.json",
+  "theme": "tribe",
+  "active": "default",
+  "activateOnStartup": true,
+  "keepExistingTerminals": false,
+  "sessions": {
+    "default": [
+      [
+        {
+          "name": "Simulator",
+          "autoExecuteCommands": true,
+          "commands": [
+            "cd lib/simulator && ./SimElevatorServer.exe"
+          ]
+        },
+        {
+          "name": "main.go",
+          "autoExecuteCommands": true,
+          "commands": [
+            "cd src && go run ."
+          ]
+        }
+      ]
+    ]
+  }
 }
