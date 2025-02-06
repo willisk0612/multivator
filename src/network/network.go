@@ -15,27 +15,6 @@ const (
 	peersPort     = 15648
 )
 
-type networkChannels struct {
-	incomingMsg chan types.Message
-	outgoingMsg chan types.Message
-	peerUpdate  chan peers.PeerUpdate
-}
-
-func initializeChannels() networkChannels {
-	return networkChannels{
-		incomingMsg: make(chan types.Message),
-		outgoingMsg: make(chan types.Message),
-		peerUpdate:  make(chan peers.PeerUpdate),
-	}
-}
-
-func setupNetworkHandlers(channels networkChannels, nodeIDStr string) {
-	go bcast.Receiver(broadcastPort, channels.incomingMsg)
-	go bcast.Transmitter(broadcastPort, channels.outgoingMsg)
-	go peers.Transmitter(peersPort, nodeIDStr, make(chan bool))
-	go peers.Receiver(peersPort, channels.peerUpdate)
-}
-
 func handlePeerUpdates(peerUpdateCh <-chan peers.PeerUpdate) {
 	for update := range peerUpdateCh {
 		log.Printf("Peers update: New: %s, Lost: %v, All: %v",
@@ -62,13 +41,19 @@ func forwardLocalEvents(eventCh <-chan types.ButtonEvent, outgoingMsgCh chan<- t
 
 func PollMessages(elevator *types.Elevator, eventCh <-chan types.ButtonEvent) {
 	nodeIDStr := fmt.Sprintf("node-%d", elevator.NodeID)
-	channels := initializeChannels()
 
-	setupNetworkHandlers(channels, nodeIDStr)
+	incomingMsg := make(chan types.Message)
+	outgoingMsg := make(chan types.Message)
+	peerUpdate := make(chan peers.PeerUpdate)
 
-	go handlePeerUpdates(channels.peerUpdate)
-	go handleIncomingMessages(channels.incomingMsg, elevator.NodeID)
-	go forwardLocalEvents(eventCh, channels.outgoingMsg, elevator.NodeID)
+	go bcast.Receiver(broadcastPort, incomingMsg)
+	go bcast.Transmitter(broadcastPort, outgoingMsg)
+	go peers.Transmitter(peersPort, nodeIDStr, make(chan bool))
+	go peers.Receiver(peersPort, peerUpdate)
+
+	go handlePeerUpdates(peerUpdate)
+	go handleIncomingMessages(incomingMsg, elevator.NodeID)
+	go forwardLocalEvents(eventCh, outgoingMsg, elevator.NodeID)
 
 	select {}
 }
