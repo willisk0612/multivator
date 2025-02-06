@@ -16,9 +16,15 @@ func init() {
 }
 
 // Moves elevator if order floor is different from current floor
-func HandleButtonPress(elevator *types.Elevator, btn elevio.ButtonEvent, timerAction chan timer.TimerAction) {
+func HandleButtonPress(elevator *types.Elevator, btn elevio.ButtonEvent, timerAction chan timer.TimerAction, eventCh chan<- types.ButtonEvent) {
 	elevator.Orders[btn.Floor][btn.Button] = 1
 	elevio.SetButtonLamp(btn.Button, btn.Floor, true)
+
+	// Broadcast button press event
+	eventCh <- types.ButtonEvent{
+		Floor:  btn.Floor,
+		Button: btn.Button,
+	}
 
 	switch elevator.Behaviour {
 	case elevio.DoorOpen:
@@ -47,6 +53,7 @@ func HandleButtonPress(elevator *types.Elevator, btn elevio.ButtonEvent, timerAc
 func HandleFloorArrival(elevator *types.Elevator, floor int, timerAction chan timer.TimerAction) {
 	elevator.Floor = floor
 	elevio.SetFloorIndicator(floor)
+
 	log.Printf("Arrived at floor %d\n", floor)
 
 	if shouldStop(elevator) {
@@ -93,6 +100,7 @@ func HandleDoorTimeout(elevator *types.Elevator, timerAction chan timer.TimerAct
 	if elevator.Behaviour != elevio.DoorOpen {
 		return
 	}
+
 	log.Println("HandleDoorTimeout: Timer expired")
 	if elevator.Obstructed {
 		log.Println("Door obstructed - keeping open")
@@ -203,19 +211,17 @@ func chooseDirection(elevator *types.Elevator) types.DirnBehaviourPair {
 // Checks if the elevator should stop at the current floor
 func shouldStop(elevator *types.Elevator) bool {
 	currentorders := elevator.Orders[elevator.Floor]
-	// Elevator should always stop at top and bottom floor
+	// At edge floors, always stop
 	if elevator.Floor == 0 || elevator.Floor == config.N_FLOORS-1 {
 		return true
 	}
 	switch elevator.Dir {
 	case elevio.MD_Down:
 		return currentorders[elevio.BT_HallDown] != 0 ||
-			currentorders[elevio.BT_Cab] != 0 ||
-			ordersBelow(elevator) == 0
+			currentorders[elevio.BT_Cab] != 0
 	case elevio.MD_Up:
 		return currentorders[elevio.BT_HallUp] != 0 ||
-			currentorders[elevio.BT_Cab] != 0 ||
-			ordersAbove(elevator) == 0
+			currentorders[elevio.BT_Cab] != 0
 	case elevio.MD_Stop:
 		return true
 	default:
@@ -227,24 +233,22 @@ func shouldStop(elevator *types.Elevator) bool {
 func clearOrdersAtFloor(elevator *types.Elevator) {
 	switch elevator.Config.ClearOrderVariant {
 	case elevio.CV_All:
-		for btn := 0; btn < config.N_BUTTONS; btn++ {
-			elevator.Orders[elevator.Floor][btn] = 0
-			elevio.SetButtonLamp(elevio.ButtonType(btn), elevator.Floor, false)
+		// At edge floors, clear all orders
+		if elevator.Floor == 0 || elevator.Floor == config.N_FLOORS-1 {
+			for btn := 0; btn < config.N_BUTTONS; btn++ {
+				elevator.Orders[elevator.Floor][btn] = 0
+				elevio.SetButtonLamp(elevio.ButtonType(btn), elevator.Floor, false)
+			}
+			return
 		}
+		fallthrough
 	case elevio.CV_InDirn:
 		clearOrderAndLamp(elevator, elevio.BT_Cab)
-
 		switch elevator.Dir {
 		case elevio.MD_Up:
 			clearOrderAndLamp(elevator, elevio.BT_HallUp)
-			if ordersAbove(elevator) == 0 {
-				clearOrderAndLamp(elevator, elevio.BT_HallDown)
-			}
 		case elevio.MD_Down:
 			clearOrderAndLamp(elevator, elevio.BT_HallDown)
-			if ordersBelow(elevator) == 0 {
-				clearOrderAndLamp(elevator, elevio.BT_HallUp)
-			}
 		}
 	}
 }

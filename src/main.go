@@ -1,17 +1,35 @@
+// Single elvator main program
 package main
 
 import (
 	"fmt"
 	"main/lib/driver-go/elevio"
-	"main/src/timer"
-	"main/src/elev"
 	"main/src/config"
+	"main/src/elev"
+	"main/src/network"
+	"main/src/timer"
+	"main/src/types"
+	"os"
+	"strconv"
 	"time"
 )
 
 func main() {
-	elevio.Init("localhost:15657", config.N_FLOORS)
-	elevator := elev.InitElevator()
+	// Default port if none specified
+	port := 15657
+
+	// Check if port number provided as argument
+	if len(os.Args) > 1 {
+		if p, err := strconv.Atoi(os.Args[1]); err == nil {
+			port = p
+		}
+	}
+
+	elevio.Init(fmt.Sprintf("localhost:%d", port), config.N_FLOORS)
+	nodeID := network.AssignNodeID()
+	fmt.Println("Node ID assigned:", nodeID)
+
+	elevator := elev.InitSystem(nodeID) // Changed from InitElevator to InitSystem
 
 	drv_buttons := make(chan elevio.ButtonEvent)
 	drv_floors := make(chan int)
@@ -22,17 +40,22 @@ func main() {
 	doorTimerTimeout := make(chan bool)
 	doorTimerAction := make(chan timer.TimerAction)
 
-	go timer.Timer(doorTimerDuration, doorTimerTimeout, doorTimerAction)
+	// Create event channel for button events only
+	eventCh := make(chan types.ButtonEvent)
+
+	// Start goroutines
 	go elevio.PollButtons(drv_buttons)
 	go elevio.PollFloorSensor(drv_floors)
 	go elevio.PollObstructionSwitch(drv_obstr)
 	go elevio.PollStopButton(drv_stop)
+	go timer.Timer(doorTimerDuration, doorTimerTimeout, doorTimerAction)
+	go network.PollMessages(elevator, eventCh)
 
 	fmt.Println("Driver started")
 	for {
 		select {
 		case btn := <-drv_buttons:
-			elev.HandleButtonPress(elevator, btn, doorTimerAction)
+			elev.HandleButtonPress(elevator, btn, doorTimerAction, eventCh)
 
 		case floor := <-drv_floors:
 			elev.HandleFloorArrival(elevator, floor, doorTimerAction)
@@ -42,6 +65,7 @@ func main() {
 
 		case <-drv_stop:
 			elev.HandleStop(elevator)
+
 		case <-doorTimerTimeout:
 			elev.HandleDoorTimeout(elevator, doorTimerAction)
 		}

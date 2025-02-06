@@ -1,24 +1,42 @@
 {
     "$schema": "https://cdn.statically.io/gh/nguyenngoclongdev/cdn/main/schema/v10/terminal-keeper.json",
     "theme": "tribe",
-    "active": "default",
+    "active": "elev 1",
     "activateOnStartup": true,
     "keepExistingTerminals": false,
     "sessions": {
-        "default": [
+        "elev 1": [
             [
                 {
-                    "name": "Simulator",
+                    "name": "Simulator 1",
                     "autoExecuteCommands": true,
                     "commands": [
                         "cd lib/simulator && ./SimElevatorServer.exe"
                     ]
                 },
                 {
-                    "name": "main.go",
+                    "name": "main 1",
                     "autoExecuteCommands": true,
                     "commands": [
-                        "cd src && go run ."
+                        "go run src/main.go"
+                    ]
+                }
+            ]
+        ],
+        "elev 2": [
+            [
+                {
+                    "name": "Simulator 2",
+                    "autoExecuteCommands": true,
+                    "commands": [
+                        "cd lib/simulator && ./SimElevatorServer.exe --port 15658"
+                    ]
+                },
+                {
+                    "name": "main 2",
+                    "autoExecuteCommands": true,
+                    "commands": [
+                        "go run src/main.go 15658"
                     ]
                 }
             ]

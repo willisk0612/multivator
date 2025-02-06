@@ -2,22 +2,28 @@ package elev
 
 import (
 	"main/lib/driver-go/elevio"
-	"main/src/types"
 	"main/src/config"
+	"main/src/types"
 )
 
-// Initializes elevator with default values. Moves elevator down if between floors.
-func InitElevator() *types.Elevator {
-	elevator := types.Elevator{
+func InitElevator(nodeID int) *types.Elevator {
+	elevator := &types.Elevator{
+		NodeID:    nodeID,
 		Dir:       elevio.MD_Stop,
 		Orders:    [config.N_FLOORS][config.N_BUTTONS]int{},
 		Behaviour: elevio.Idle,
 	}
-	// Move down to find a floor if starting between floors
+	return elevator
+}
+
+func InitSystem(nodeID int) *types.Elevator {
+	elevator := InitElevator(nodeID)
+
 	if elevio.GetFloor() == -1 {
 		elevator.Dir = elevio.MD_Down
 		elevator.Behaviour = elevio.Moving
 		elevio.SetMotorDirection(elevator.Dir)
 	}
-	return &elevator
+
+	return elevator
 }

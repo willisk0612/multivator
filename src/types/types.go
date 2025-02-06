@@ -5,8 +5,19 @@ import (
 	"main/src/config"
 )
 
+type ButtonEvent struct {
+	Floor  int
+	Button elevio.ButtonType
+}
+
+type Message struct {
+	SenderNodeID int
+	Event        ButtonEvent
+}
+
 // Elevator type with methods for handling fsm events
 type Elevator struct {
+	NodeID     int
 	Floor      int
 	Dir        elevio.MotorDirection
 	Orders     [config.N_FLOORS][config.N_BUTTONS]int
