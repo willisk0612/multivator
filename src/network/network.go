@@ -12,22 +12,41 @@ import (
 )
 
 const (
-	broadcastPort = 20000
-	peersPort     = 20001
 	nodeID        = "node-1" // change as needed
 )
 
 func main() {
-	// Initialize channels for broadcasting and peer updates.
-	msgCh := make(chan string)
+	mode := "Simulation"
+	var broadcastPort, peersPort int
+
+	if mode == "Simulation" {
+		// set broadcastPort and peersPort to 20000 and 20001
+		broadcastPort = 20000
+		peersPort = 20001
+	} else if mode == "Server" {
+		// set broadcastPort and peersPort to 15647
+		broadcastPort = 15647
+		peersPort = 15647
+	}
+
+	// Initialize channels for incoming and outgoing messages and peer updates.
+	incomingMsgCh := make(chan string)
+	outgoingMsgCh := make(chan string)
 	peerUpdateCh := make(chan peers.PeerUpdate)
 	peerTxEnable := make(chan bool, 1)
 	peerTxEnable <- true
 
 	// Start the broadcast receiver and transmitter.
-	go bcast.Receiver(broadcastPort, msgCh)
+	go bcast.Receiver(broadcastPort, incomingMsgCh)
 	go func() {
-		bcast.Transmitter(broadcastPort, msgCh)
+		bcast.Transmitter(broadcastPort, outgoingMsgCh)
+	}()
+
+	// Add a goroutine to print received messages.
+	go func() {
+		for msg := range incomingMsgCh {
+			fmt.Printf("Received: %s\n", msg)
+		}
 	}()
 
 	// Start peers (node discovery) transmitter and receiver.
@@ -45,7 +64,7 @@ func main() {
 		}
 	}()
 
-	// Read user input and broadcast messages.
+	// Read user input and send messages for broadcast.
 	reader := bufio.NewReader(os.Stdin)
 	for {
 		fmt.Print("Enter message: ")
@@ -56,7 +75,7 @@ func main() {
 			continue
 		}
 		if msg := strings.TrimSpace(input); msg != "" {
-			msgCh <- msg
+			outgoingMsgCh <- msg
 		}
 	}
 }
