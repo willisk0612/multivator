@@ -1,6 +1,7 @@
 package timer
 
 import (
+	"main/src/config"
 	"time"
 )
 
@@ -9,10 +10,6 @@ type TimerAction int
 const (
 	Start TimerAction = iota
 	Stop
-)
-
-const (
-	DOOR_OPEN_DURATION = 3 * time.Second
 )
 
 // Starts, stops or resets a door timer for a specified time
@@ -40,5 +37,5 @@ func resetTimer(t *time.Timer) {
 		default:
 		}
 	}
-	t.Reset(DOOR_OPEN_DURATION)
+	t.Reset(config.DOOR_OPEN_DURATION)
 }

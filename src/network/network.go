@@ -15,45 +15,60 @@ const (
 	peersPort     = 15648
 )
 
+type networkChannels struct {
+	incomingMsg chan types.Message
+	outgoingMsg chan types.Message
+	peerUpdate  chan peers.PeerUpdate
+}
+
+func initializeChannels() networkChannels {
+	return networkChannels{
+		incomingMsg: make(chan types.Message),
+		outgoingMsg: make(chan types.Message),
+		peerUpdate:  make(chan peers.PeerUpdate),
+	}
+}
+
+func setupNetworkHandlers(channels networkChannels, nodeIDStr string) {
+	go bcast.Receiver(broadcastPort, channels.incomingMsg)
+	go bcast.Transmitter(broadcastPort, channels.outgoingMsg)
+	go peers.Transmitter(peersPort, nodeIDStr, make(chan bool))
+	go peers.Receiver(peersPort, channels.peerUpdate)
+}
+
+func handlePeerUpdates(peerUpdateCh <-chan peers.PeerUpdate) {
+	for update := range peerUpdateCh {
+		log.Printf("Peers update: New: %s, Lost: %v, All: %v",
+			update.New, update.Lost, update.Peers)
+	}
+}
+
+func handleIncomingMessages(incomingMsgCh <-chan types.Message, nodeID int) {
+	for msg := range incomingMsgCh {
+		if msg.SenderNodeID != nodeID {
+			fmt.Print(formatButtonEvent(msg))
+		}
+	}
+}
+
+func forwardLocalEvents(eventCh <-chan types.ButtonEvent, outgoingMsgCh chan<- types.Message, nodeID int) {
+	for event := range eventCh {
+		outgoingMsgCh <- types.Message{
+			SenderNodeID: nodeID,
+			Event:        event,
+		}
+	}
+}
+
 func PollMessages(elevator *types.Elevator, eventCh <-chan types.ButtonEvent) {
 	nodeIDStr := fmt.Sprintf("node-%d", elevator.NodeID)
-	var incomingMsgCh = make(chan types.Message)
-	var outgoingMsgCh = make(chan types.Message)
+	channels := initializeChannels()
 
-	go bcast.Receiver(broadcastPort, incomingMsgCh)
-	go bcast.Transmitter(broadcastPort, outgoingMsgCh)
+	setupNetworkHandlers(channels, nodeIDStr)
 
-	// Set up peer handling
-	peerUpdateCh := make(chan peers.PeerUpdate)
-	go peers.Transmitter(peersPort, nodeIDStr, make(chan bool))
-	go peers.Receiver(peersPort, peerUpdateCh)
-
-	// Handle peer updates
-	go func() {
-		for update := range peerUpdateCh {
-			log.Printf("Peers update: New: %s, Lost: %v, All: %v",
-				update.New, update.Lost, update.Peers)
-		}
-	}()
-
-	// Handle incoming messages
-	go func() {
-		for msg := range incomingMsgCh {
-			if msg.SenderNodeID != elevator.NodeID {
-				fmt.Print(formatButtonEvent(msg))
-			}
-		}
-	}()
-
-	// Forward local events to network
-	go func() {
-		for event := range eventCh {
-			outgoingMsgCh <- types.Message{
-				SenderNodeID: elevator.NodeID,
-				Event:       event,
-			}
-		}
-	}()
+	go handlePeerUpdates(channels.peerUpdate)
+	go handleIncomingMessages(channels.incomingMsg, elevator.NodeID)
+	go forwardLocalEvents(eventCh, channels.outgoingMsg, elevator.NodeID)
 
 	select {}
 }
@@ -84,12 +99,12 @@ Loop:
 }
 
 func formatButtonEvent(m types.Message) string {
-    buttonType := map[elevio.ButtonType]string{
-        elevio.BT_HallUp:   "Hall up",
-        elevio.BT_HallDown: "Hall down",
-        elevio.BT_Cab:      "Cab",
-    }[m.Event.Button]
+	buttonType := map[elevio.ButtonType]string{
+		elevio.BT_HallUp:   "Hall up",
+		elevio.BT_HallDown: "Hall down",
+		elevio.BT_Cab:      "Cab",
+	}[m.Event.Button]
 
-    return fmt.Sprintf("\n[Node %d] Button press: %s at floor %d\n",
-        m.SenderNodeID, buttonType, m.Event.Floor)
+	return fmt.Sprintf("\n[Node %d] Button press: %s at floor %d\n",
+		m.SenderNodeID, buttonType, m.Event.Floor)
 }

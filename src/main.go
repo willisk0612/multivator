@@ -15,7 +15,6 @@ import (
 )
 
 func main() {
-	// Default port if none specified
 	port := 15657
 
 	// Check if port number provided as argument
@@ -29,21 +28,19 @@ func main() {
 	nodeID := network.AssignNodeID()
 	fmt.Println("Node ID assigned:", nodeID)
 
-	elevator := elev.InitSystem(nodeID) // Changed from InitElevator to InitSystem
+	elevator := elev.InitSystem(nodeID)
 
 	drv_buttons := make(chan elevio.ButtonEvent)
 	drv_floors := make(chan int)
 	drv_obstr := make(chan bool)
 	drv_stop := make(chan bool)
 
-	doorTimerDuration := time.NewTimer(timer.DOOR_OPEN_DURATION)
+	doorTimerDuration := time.NewTimer(config.DOOR_OPEN_DURATION)
 	doorTimerTimeout := make(chan bool)
 	doorTimerAction := make(chan timer.TimerAction)
 
-	// Create event channel for button events only
 	eventCh := make(chan types.ButtonEvent)
 
-	// Start goroutines
 	go elevio.PollButtons(drv_buttons)
 	go elevio.PollFloorSensor(drv_floors)
 	go elevio.PollObstructionSwitch(drv_obstr)
