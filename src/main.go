@@ -1,4 +1,3 @@
-// Single elvator main program
 package main
 
 import (
@@ -40,13 +39,14 @@ func main() {
 	doorTimerAction := make(chan timer.TimerAction)
 
 	eventCh := make(chan types.ButtonEvent)
+	networkEventCh := make(chan types.Message)
 
 	go elevio.PollButtons(drv_buttons)
 	go elevio.PollFloorSensor(drv_floors)
 	go elevio.PollObstructionSwitch(drv_obstr)
 	go elevio.PollStopButton(drv_stop)
 	go timer.Timer(doorTimerDuration, doorTimerTimeout, doorTimerAction)
-	go network.PollMessages(elevator, eventCh)
+	go network.PollMessages(elevator, eventCh, networkEventCh)
 
 	fmt.Println("Driver started")
 	for {
@@ -65,6 +65,9 @@ func main() {
 
 		case <-doorTimerTimeout:
 			elev.HandleDoorTimeout(elevator, doorTimerAction)
+
+		case netEvent := <-networkEventCh:
+			network.HandleMessageEvent(netEvent)
 		}
 	}
 }

@@ -1,4 +1,4 @@
-// Contains helper functions for main.go
+// Contains logic for single elevator
 package elev
 
 import (
@@ -20,10 +20,11 @@ func HandleButtonPress(elevator *types.Elevator, btn elevio.ButtonEvent, timerAc
 	elevator.Orders[btn.Floor][btn.Button] = 1
 	elevio.SetButtonLamp(btn.Button, btn.Floor, true)
 
-	// Broadcast button press event
-	eventCh <- types.ButtonEvent{
-		Floor:  btn.Floor,
-		Button: btn.Button,
+	if eventCh != nil {
+		eventCh <- types.ButtonEvent{
+			Floor:  btn.Floor,
+			Button: btn.Button,
+		}
 	}
 
 	switch elevator.Behaviour {
@@ -32,7 +33,6 @@ func HandleButtonPress(elevator *types.Elevator, btn elevio.ButtonEvent, timerAc
 			timerAction <- timer.Start
 		}
 	case elevio.Moving:
-		// Keep moving, orders handled at floor arrival
 		return
 	case elevio.Idle:
 		if elevator.Floor == btn.Floor {
@@ -40,7 +40,7 @@ func HandleButtonPress(elevator *types.Elevator, btn elevio.ButtonEvent, timerAc
 			elevio.SetDoorOpenLamp(true)
 			timerAction <- timer.Start
 		} else {
-			pair := chooseDirection(elevator)
+			pair := chooseDirInit(elevator)
 			elevator.Dir = pair.Dir
 			elevator.Behaviour = pair.Behaviour
 			elevio.SetMotorDirection(elevator.Dir)
@@ -111,7 +111,7 @@ func HandleDoorTimeout(elevator *types.Elevator, timerAction chan timer.TimerAct
 	log.Println("Closing door")
 	elevio.SetDoorOpenLamp(false)
 	clearOrdersAtFloor(elevator)
-	pair := chooseDirection(elevator)
+	pair := chooseDirInit(elevator)
 	elevator.Dir = pair.Dir
 	elevator.Behaviour = pair.Behaviour
 
@@ -147,68 +147,45 @@ func ordersHere(elevator *types.Elevator) (result int) {
 	return countOrders(elevator, elevator.Floor, elevator.Floor+1)
 }
 
-// Chooses elevator direction based on current orders. Prio: Up > Down > Stop
-func chooseDirection(elevator *types.Elevator) types.DirnBehaviourPair {
-	switch elevator.Dir {
+func chooseDirWhileMoving(elevator *types.Elevator, dir elevio.MotorDirection) types.DirnBehaviourPair {
+	switch dir {
 	case elevio.MD_Up:
 		if ordersAbove(elevator) > 0 {
-			return types.DirnBehaviourPair{
-				Dir:       elevio.MD_Up,
-				Behaviour: elevio.Moving,
-			}
-		} else if ordersHere(elevator) > 0 {
-			return types.DirnBehaviourPair{
-				Dir:       elevio.MD_Stop,
-				Behaviour: elevio.DoorOpen,
-			}
-		} else if ordersBelow(elevator) > 0 {
-			return types.DirnBehaviourPair{
-				Dir:       elevio.MD_Down,
-				Behaviour: elevio.Moving,
-			}
+			return types.DirnBehaviourPair{Dir: dir, Behaviour: elevio.Moving}
 		}
 	case elevio.MD_Down:
 		if ordersBelow(elevator) > 0 {
-			return types.DirnBehaviourPair{
-				Dir:       elevio.MD_Down,
-				Behaviour: elevio.Moving,
-			}
-		} else if ordersHere(elevator) > 0 {
-			return types.DirnBehaviourPair{
-				Dir:       elevio.MD_Stop,
-				Behaviour: elevio.DoorOpen,
-			}
-		} else if ordersAbove(elevator) > 0 {
-			return types.DirnBehaviourPair{
-				Dir:       elevio.MD_Up,
-				Behaviour: elevio.Moving,
-			}
-		}
-	case elevio.MD_Stop:
-		if ordersAbove(elevator) > 0 {
-			return types.DirnBehaviourPair{
-				Dir:       elevio.MD_Up,
-				Behaviour: elevio.Moving,
-			}
-		} else if ordersBelow(elevator) > 0 {
-			return types.DirnBehaviourPair{
-				Dir:       elevio.MD_Down,
-				Behaviour: elevio.Moving,
-			}
-		} else if ordersHere(elevator) > 0 {
-			return types.DirnBehaviourPair{
-				Dir:       elevio.MD_Stop,
-				Behaviour: elevio.DoorOpen,
-			}
+			return types.DirnBehaviourPair{Dir: dir, Behaviour: elevio.Moving}
 		}
 	}
-	return types.DirnBehaviourPair{
-		Dir:       elevio.MD_Stop,
-		Behaviour: elevio.Idle,
+
+	if ordersHere(elevator) > 0 {
+		return types.DirnBehaviourPair{Dir: elevio.MD_Stop, Behaviour: elevio.DoorOpen}
 	}
+
+	// Check opposite direction if no orders in current direction
+	if dir == elevio.MD_Up && ordersBelow(elevator) > 0 {
+		return types.DirnBehaviourPair{Dir: elevio.MD_Down, Behaviour: elevio.Moving}
+	} else if dir == elevio.MD_Down && ordersAbove(elevator) > 0 {
+		return types.DirnBehaviourPair{Dir: elevio.MD_Up, Behaviour: elevio.Moving}
+	}
+
+	return types.DirnBehaviourPair{Dir: elevio.MD_Stop, Behaviour: elevio.Idle}
 }
 
-// Checks if the elevator should stop at the current floor
+func chooseDirInit(elevator *types.Elevator) types.DirnBehaviourPair {
+	if elevator.Dir == elevio.MD_Stop {
+		if ordersAbove(elevator) > 0 {
+			return types.DirnBehaviourPair{Dir: elevio.MD_Up, Behaviour: elevio.Moving}
+		} else if ordersBelow(elevator) > 0 {
+			return types.DirnBehaviourPair{Dir: elevio.MD_Down, Behaviour: elevio.Moving}
+		}
+		return types.DirnBehaviourPair{Dir: elevio.MD_Stop, Behaviour: elevio.Idle}
+	}
+	return chooseDirWhileMoving(elevator, elevator.Dir)
+}
+
+// Checks if elevator should stop at current floor
 func shouldStop(elevator *types.Elevator) bool {
 	currentorders := elevator.Orders[elevator.Floor]
 	// At edge floors, always stop
@@ -229,31 +206,32 @@ func shouldStop(elevator *types.Elevator) bool {
 	}
 }
 
-// Clears orders at current floor
 func clearOrdersAtFloor(elevator *types.Elevator) {
-	switch elevator.Config.ClearOrderVariant {
-	case elevio.CV_All:
-		// At edge floors, clear all orders
-		if elevator.Floor == 0 || elevator.Floor == config.N_FLOORS-1 {
-			for btn := 0; btn < config.N_BUTTONS; btn++ {
-				elevator.Orders[elevator.Floor][btn] = 0
-				elevio.SetButtonLamp(elevio.ButtonType(btn), elevator.Floor, false)
-			}
-			return
-		}
-		fallthrough
-	case elevio.CV_InDirn:
-		clearOrderAndLamp(elevator, elevio.BT_Cab)
-		switch elevator.Dir {
-		case elevio.MD_Up:
-			clearOrderAndLamp(elevator, elevio.BT_HallUp)
-		case elevio.MD_Down:
+	clearOrderAndLamp(elevator, elevio.BT_Cab)
+	// At edge floors, clear all hall calls
+	if elevator.Floor == 0 || elevator.Floor == config.N_FLOORS-1 {
+		clearOrderAndLamp(elevator, elevio.BT_HallUp)
+		clearOrderAndLamp(elevator, elevio.BT_HallDown)
+		return
+	}
+
+	switch elevator.Dir {
+	case elevio.MD_Up:
+		clearOrderAndLamp(elevator, elevio.BT_HallUp)
+		if ordersAbove(elevator) == 0 {
 			clearOrderAndLamp(elevator, elevio.BT_HallDown)
 		}
+	case elevio.MD_Down:
+		clearOrderAndLamp(elevator, elevio.BT_HallDown)
+		if ordersBelow(elevator) == 0 {
+			clearOrderAndLamp(elevator, elevio.BT_HallUp)
+		}
+	case elevio.MD_Stop:
+		clearOrderAndLamp(elevator, elevio.BT_HallUp)
+		clearOrderAndLamp(elevator, elevio.BT_HallDown)
 	}
 }
 
-// Helper function to clear orders and lamps
 func clearOrderAndLamp(elevator *types.Elevator, btn elevio.ButtonType) {
 	elevator.Orders[elevator.Floor][btn] = 0
 	elevio.SetButtonLamp(btn, elevator.Floor, false)
