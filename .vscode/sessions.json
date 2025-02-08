@@ -5,7 +5,7 @@
     "activateOnStartup": true,
     "keepExistingTerminals": false,
     "sessions": {
-        "elev 1": [
+        "default": [
             [
                 {
                     "name": "Simulator 1",
