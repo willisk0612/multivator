@@ -54,7 +54,6 @@ const (
 
 type ElevatorConfig struct {
 	ClearOrderVariant ClearOrderVariant
-	DoorOpenDuration    time.Duration
 }
 
 type ElevInputDevice int
