@@ -6,7 +6,6 @@ import (
 	"time"
 )
 
-// Order represents a button press event and associated metadata
 type ButtonEvent struct {
 	Floor  int
 	Button elevio.ButtonType
@@ -45,6 +44,7 @@ type Elevator struct {
 	Obstructed bool
 }
 
+// Stores direction and behaviour to keep track of direction even when elevator is idle
 type DirnBehaviourPair struct {
 	Dir       elevio.MotorDirection
 	Behaviour elevio.ElevatorBehaviour

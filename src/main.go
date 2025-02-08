@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"main/lib/driver-go/elevio"
 	"main/src/config"
 	"main/src/elev"
@@ -14,8 +15,9 @@ import (
 )
 
 func main() {
-	port := 15657
+	elev.InitLogger()
 
+	port := 15657
 	// Check if port number provided as argument
 	if len(os.Args) > 1 {
 		if p, err := strconv.Atoi(os.Args[1]); err == nil {
@@ -25,8 +27,6 @@ func main() {
 
 	elevio.Init(fmt.Sprintf("localhost:%d", port), config.N_FLOORS)
 	nodeID := network.AssignNodeID()
-	fmt.Println("Node ID assigned:", nodeID)
-
 	elevator := elev.InitSystem(nodeID)
 
 	drv_buttons := make(chan elevio.ButtonEvent)
@@ -48,7 +48,8 @@ func main() {
 	go timer.Timer(doorTimerDuration, doorTimerTimeout, doorTimerAction)
 	go network.PollMessages(elevator, eventCh, networkEventCh)
 
-	fmt.Println("Driver started")
+	slog.Info("Driver initialized", "port", port)
+
 	for {
 		select {
 		case btn := <-drv_buttons:

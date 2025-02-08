@@ -12,7 +12,6 @@ const (
 	Stop
 )
 
-// Starts, stops or resets a door timer for a specified time
 func Timer(duration *time.Timer, timeout chan bool, action <-chan TimerAction) {
 	for {
 		select {

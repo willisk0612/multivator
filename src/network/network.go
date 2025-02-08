@@ -2,7 +2,7 @@ package network
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"main/lib/driver-go/elevio"
 	"main/lib/network-go/network/bcast"
 	"main/lib/network-go/network/peers"
@@ -25,8 +25,10 @@ var (
 
 func handlePeerUpdates(peerUpdateCh <-chan peers.PeerUpdate) {
 	for update := range peerUpdateCh {
-		log.Printf("Peers update: New: %s, Lost: %v, All: %v",
-			update.New, update.Lost, update.Peers)
+		slog.Info("Peer update received",
+			"new", update.New,
+			"lost", update.Lost,
+			"peers", update.Peers)
 	}
 }
 
@@ -116,29 +118,28 @@ func HandleMessageEvent(msg types.Message) {
 			elevio.BT_Cab:      "Cab",
 		}[msg.Event.Button]
 
-		fmt.Printf("\n[Node %d] %s at floor %d\n",
-			msg.SenderID,
-			buttonType,
-			msg.Event.Floor)
+		slog.Info("Button event received",
+			"node", msg.SenderID,
+			"type", buttonType,
+			"floor", msg.Event.Floor)
 	}
 }
 
 func handleRetransmissions(outgoingMsgCh chan<- types.Message) {
 	for buf := range outgoingBuffer {
-		outgoingMsgCh <- buf.Msg
-
-		select {
-		case <-buf.Done:
-			return
-		case <-time.After(ackTimeout):
-			if buf.RetryCount >= maxRetries {
-				close(buf.Done)
-				return
-			}
-
-			buf.RetryCount++
+		for attempt := 0; attempt <= maxRetries; attempt++ {
 			outgoingMsgCh <- buf.Msg
-			outgoingBuffer <- buf
+
+			select {
+			case <-buf.Done:
+				return
+			case <-time.After(ackTimeout):
+				if attempt == maxRetries {
+					close(buf.Done)
+					return
+				}
+				continue
+			}
 		}
 	}
 }
