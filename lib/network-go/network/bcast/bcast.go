@@ -1,9 +1,9 @@
 package bcast
 
 import (
-	"main/lib/network-go/network/conn"
 	"encoding/json"
 	"fmt"
+	"main/lib/network-go/network/conn"
 	"net"
 	"reflect"
 )

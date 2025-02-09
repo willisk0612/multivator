@@ -29,7 +29,7 @@ func main() {
 	nodeID := network.AssignNodeID()
 	elevator := elev.InitSystem(nodeID)
 
-	drv_buttons := make(chan elevio.ButtonEvent)
+	drv_buttons := make(chan types.ButtonEvent)
 	drv_floors := make(chan int)
 	drv_obstr := make(chan bool)
 	drv_stop := make(chan bool)

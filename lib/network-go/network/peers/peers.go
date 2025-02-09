@@ -1,18 +1,13 @@
 package peers
 
 import (
-	"main/lib/network-go/network/conn"
 	"fmt"
+	"main/lib/network-go/network/conn"
+	"main/src/types"
 	"net"
 	"sort"
 	"time"
 )
-
-type PeerUpdate struct {
-	Peers []string
-	New   string
-	Lost  []string
-}
 
 const interval = 15 * time.Millisecond
 const timeout = 500 * time.Millisecond
@@ -29,15 +24,17 @@ func Transmitter(port int, id string, transmitEnable <-chan bool) {
 		case <-time.After(interval):
 		}
 		if enable {
-			conn.WriteTo([]byte(id), addr)
+			if _, err := conn.WriteTo([]byte(id), addr); err != nil {
+				fmt.Println("WriteTo error:", err)
+			}
 		}
 	}
 }
 
-func Receiver(port int, peerUpdateCh chan<- PeerUpdate) {
+func Receiver(port int, peerUpdateCh chan<- types.PeerUpdate) {
 
 	var buf [1024]byte
-	var p PeerUpdate
+	var p types.PeerUpdate
 	lastSeen := make(map[string]time.Time)
 
 	conn := conn.DialBroadcastUDP(port)
@@ -45,7 +42,9 @@ func Receiver(port int, peerUpdateCh chan<- PeerUpdate) {
 	for {
 		updated := false
 
-		conn.SetReadDeadline(time.Now().Add(interval))
+		if err := conn.SetReadDeadline(time.Now().Add(interval)); err != nil {
+			fmt.Println("SetReadDeadline error:", err)
+		}
 		n, _, _ := conn.ReadFrom(buf[0:])
 
 		id := string(buf[:n])
@@ -64,7 +63,7 @@ func Receiver(port int, peerUpdateCh chan<- PeerUpdate) {
 		// Removing dead connection
 		p.Lost = make([]string, 0)
 		for k, v := range lastSeen {
-			if time.Now().Sub(v) > timeout {
+			if time.Since(v) > timeout {
 				updated = true
 				p.Lost = append(p.Lost, k)
 				delete(lastSeen, k)
@@ -75,7 +74,7 @@ func Receiver(port int, peerUpdateCh chan<- PeerUpdate) {
 		if updated {
 			p.Peers = make([]string, 0, len(lastSeen))
 
-			for k, _ := range lastSeen {
+			for k := range lastSeen {
 				p.Peers = append(p.Peers, k)
 			}
 

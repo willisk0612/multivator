@@ -3,7 +3,6 @@ package network
 import (
 	"fmt"
 	"log/slog"
-	"main/lib/driver-go/elevio"
 	"main/lib/network-go/network/bcast"
 	"main/lib/network-go/network/peers"
 	"main/src/types"
@@ -23,7 +22,7 @@ var (
 	ackChannel     = make(chan int64, bufferSize)
 )
 
-func handlePeerUpdates(peerUpdateCh <-chan peers.PeerUpdate) {
+func handlePeerUpdates(peerUpdateCh <-chan types.PeerUpdate) {
 	for update := range peerUpdateCh {
 		slog.Info("Peer update received",
 			"new", update.New,
@@ -69,7 +68,7 @@ func PollMessages(elevator *types.Elevator, eventCh <-chan types.ButtonEvent, ne
 
 	incomingMsg := make(chan types.Message)
 	outgoingMsg := make(chan types.Message)
-	peerUpdate := make(chan peers.PeerUpdate)
+	peerUpdate := make(chan types.PeerUpdate)
 
 	go bcast.Receiver(broadcastPort, incomingMsg)
 	go bcast.Transmitter(broadcastPort, outgoingMsg)
@@ -93,7 +92,7 @@ func AssignNodeID() int {
 }
 
 func numConnectedPeers() int {
-	peerUpdateCh := make(chan peers.PeerUpdate, 1)
+	peerUpdateCh := make(chan types.PeerUpdate, 1)
 	go peers.Receiver(peersPort, peerUpdateCh)
 	deadline := time.After(2 * time.Second)
 	var peersList []string
@@ -112,10 +111,10 @@ Loop:
 // Helper function to handle network events
 func HandleMessageEvent(msg types.Message) {
 	if msg.Type == types.MsgButtonEvent {
-		buttonType := map[elevio.ButtonType]string{
-			elevio.BT_HallUp:   "Hall up",
-			elevio.BT_HallDown: "Hall down",
-			elevio.BT_Cab:      "Cab",
+		buttonType := map[types.ButtonType]string{
+			types.BT_HallUp:   "Hall up",
+			types.BT_HallDown: "Hall down",
+			types.BT_Cab:      "Cab",
 		}[msg.Event.Button]
 
 		slog.Info("Button event received",
