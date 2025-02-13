@@ -27,7 +27,9 @@ func main() {
 
 	elevio.Init(fmt.Sprintf("localhost:%d", port), config.N_FLOORS)
 	nodeID := network.AssignNodeID()
+	// Initialize elevator and wrap it in the manager.
 	elevator := elev.InitSystem(nodeID)
+	mgr := elev.StartElevatorManager(elevator)
 
 	drv_buttons := make(chan types.ButtonEvent)
 	drv_floors := make(chan int)
@@ -38,37 +40,63 @@ func main() {
 	doorTimerTimeout := make(chan bool)
 	doorTimerAction := make(chan timer.TimerAction)
 
-	eventCh := make(chan types.ButtonEvent)
-	networkEventCh := make(chan types.Message)
+	outMsgCh := make(chan types.Message)
+	btnEventCh := make(chan types.ButtonEvent)
+	assignmentCh := make(chan types.OrderAssignment)
 
 	go elevio.PollButtons(drv_buttons)
 	go elevio.PollFloorSensor(drv_floors)
 	go elevio.PollObstructionSwitch(drv_obstr)
 	go elevio.PollStopButton(drv_stop)
 	go timer.Timer(doorTimerDuration, doorTimerTimeout, doorTimerAction)
-	go network.PollMessages(elevator, eventCh, networkEventCh)
+	// Pass mgr.Get as the getter function.
+	go network.PollMessages(mgr.Get, btnEventCh, assignmentCh)
 
 	slog.Info("Driver initialized", "port", port)
 
 	for {
 		select {
 		case btn := <-drv_buttons:
-			elev.HandleButtonPress(elevator, btn, doorTimerAction, eventCh)
-
+			mgr.Execute(elev.ElevatorCmd{
+				Exec: func(e *types.Elevator) {
+					elev.HandleButtonPress(e, btn, doorTimerAction, btnEventCh, outMsgCh, assignmentCh)
+				},
+			})
 		case floor := <-drv_floors:
-			elev.HandleFloorArrival(elevator, floor, doorTimerAction)
-
+			mgr.Execute(elev.ElevatorCmd{
+				Exec: func(e *types.Elevator) {
+					elev.HandleFloorArrival(e, floor, doorTimerAction)
+				},
+			})
 		case obstruction := <-drv_obstr:
-			elev.HandleObstruction(elevator, obstruction, doorTimerAction)
-
+			mgr.Execute(elev.ElevatorCmd{
+				Exec: func(e *types.Elevator) {
+					elev.HandleObstruction(e, obstruction, doorTimerAction)
+				},
+			})
 		case <-drv_stop:
-			elev.HandleStop(elevator)
-
+			mgr.Execute(elev.ElevatorCmd{
+				Exec: func(e *types.Elevator) {
+					elev.HandleStop(e)
+				},
+			})
 		case <-doorTimerTimeout:
-			elev.HandleDoorTimeout(elevator, doorTimerAction)
-
-		case netEvent := <-networkEventCh:
-			network.HandleMessageEvent(netEvent)
+			mgr.Execute(elev.ElevatorCmd{
+				Exec: func(e *types.Elevator) {
+					elev.HandleDoorTimeout(e, doorTimerAction)
+				},
+			})
+		case assignment := <-assignmentCh:
+			// Process order if locally assigned.
+			if assignment.IsLocal {
+				mgr.Execute(elev.ElevatorCmd{
+					Exec: func(e *types.Elevator) {
+						if err := elev.ProcessOrder(e, assignment.Event.Floor, assignment.Event.Button, doorTimerAction); err != nil {
+							slog.Error("Failed to process order", "error", err, "event", assignment.Event)
+						}
+					},
+				})
+			}
 		}
 	}
 }

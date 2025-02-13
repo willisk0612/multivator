@@ -6,7 +6,7 @@ type Elevator struct {
 	NodeID     int
 	Floor      int
 	Dir        MotorDirection
-	Orders     [config.N_FLOORS][config.N_BUTTONS]int
+	Orders     [config.N_FLOORS][config.N_BUTTONS]bool
 	Behaviour  ElevatorBehaviour
 	Obstructed bool
 }

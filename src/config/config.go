@@ -7,4 +7,5 @@ const (
 	N_BUTTONS          = 3
 	SENSOR_POLLRATE    = 25 * time.Millisecond
 	DOOR_OPEN_DURATION = 3 * time.Second
+	TRAVEL_DURATION    = 2 * time.Second
 )
