@@ -7,8 +7,6 @@ type MessageType int
 const (
     HallOrder MessageType = iota
     Bid
-    Ack
-    Assignment
 )
 
 type Message struct {
@@ -36,7 +34,6 @@ type EventBidsPair struct {
 
 type OrderAssignment struct {
     Event      ButtonEvent
-    AssignedTo int
     Cost       time.Duration
     IsLocal    bool
 }

@@ -1,7 +1,6 @@
 package elev
 
 import (
-	"fmt"
 	"log/slog"
 	"main/lib/driver-go/elevio"
 	"main/src/config"
@@ -9,48 +8,39 @@ import (
 	"main/src/types"
 )
 
-// Processes cab and hall orders
-func ProcessOrder(elevator *types.Elevator, floor int, btn types.ButtonType, timerAction chan timer.TimerAction) error {
-	if elevator.Floor == floor {
-		return openDoor(elevator, timerAction)
-	}
-	elevator.Orders[floor][btn] = true
-	elevator.Dir = chooseDirInit(elevator).Dir
-	return moveElev(elevator)
-}
-
-func HandleButtonPress(elevator *types.Elevator, btn types.ButtonEvent, timerAction chan timer.TimerAction, btnEventCh chan<- types.ButtonEvent, outMsgCh chan<- types.Message, assignmentCh chan<- types.OrderAssignment) {
-	if btn.Button == types.BT_Cab {
-		elevator.Orders[btn.Floor][btn.Button] = true
-		elevio.SetButtonLamp(btn.Button, btn.Floor, true)
-		if elevator.Behaviour == types.DoorOpen && elevator.Floor == btn.Floor {
-			timerAction <- timer.Start
-			clearFloor(elevator)
-		} else if elevator.Behaviour == types.Idle {
-			if err := ProcessOrder(elevator, btn.Floor, btn.Button, timerAction); err != nil {
-				slog.Error("Cab call: failed to process order", "error", err, "target_floor", btn.Floor)
-			} else if elevator.Floor == btn.Floor {
-				clearFloor(elevator)
-			}
-		}
+// Handles button presses. In case of cab button, move elevator to floor and open door. In case of hall button, send hall call to network module.
+func HandleButtonPress(elevator *types.Elevator, btn types.ButtonEvent, timerAction chan timer.TimerAction, hallEventCh chan<- types.ButtonEvent, outMsgCh chan<- types.Message) {
+	if btn.Button == types.BT_Cab || elevio.GetFloor() == -1 {
+		MoveElevator(elevator, btn, timerAction)
 	} else {
-		if btnEventCh != nil {
-			btnEventCh <- btn
+		if hallEventCh != nil {
+			hallEventCh <- btn
 		}
 	}
 }
 
-// Move elevator, update state. Includes safety check to avoid moving while door is open.
-func moveElev(elevator *types.Elevator) error {
-	if elevator.Behaviour == types.DoorOpen {
-		return fmt.Errorf("cannot move while door is open")
+// Move elevator to floor, set order and lamp
+func MoveElevator(elevator *types.Elevator, btn types.ButtonEvent, timerAction chan timer.TimerAction) {
+	elevator.Orders[btn.Floor][btn.Button] = true
+	elevio.SetButtonLamp(btn.Button, btn.Floor, true)
+
+	if elevator.Floor == btn.Floor {
+		OpenDoor(elevator, timerAction)
+		clearFloor(elevator)
+		return
 	}
-	elevator.Behaviour = types.Moving
-	elevio.SetMotorDirection(elevator.Dir)
-	return nil
+
+	if elevator.Behaviour == types.Idle || elevio.GetFloor() == -1 {
+		if elevator.Floor == btn.Floor {
+			OpenDoor(elevator, timerAction)
+		}
+		elevator.Orders[btn.Floor][btn.Button] = true
+		elevator.Dir = chooseDirInit(elevator).Dir
+		moveMotor(elevator)
+	}
 }
 
-// Stops elevator at floor and opens door.
+// Checks if elevator should stop at floor and opens door if so.
 func HandleFloorArrival(elevator *types.Elevator, floor int, timerAction chan timer.TimerAction) {
 	if floor == -1 {
 		slog.Error("Floor arrival with undefined floor")
@@ -59,20 +49,11 @@ func HandleFloorArrival(elevator *types.Elevator, floor int, timerAction chan ti
 	elevator.Floor = floor
 	elevio.SetFloorIndicator(floor)
 
-	slog.Debug("Floor arrival",
-		"floor", floor,
-		"direction", elevator.Dir,
-		"behaviour", elevator.Behaviour)
-
-	if ordersHere(elevator) > 0 {
+	if shouldStop(elevator) {
 		elevio.SetMotorDirection(types.MD_Stop)
 		elevator.Behaviour = types.Idle
-		if err := openDoor(elevator, timerAction); err == nil {
-			slog.Debug("Door opened", "floor", floor, "behaviour", elevator.Behaviour)
-			clearFloor(elevator)
-		} else {
-			slog.Error("Failed to open door", "error", err, "floor", floor, "current_behaviour", elevator.Behaviour)
-		}
+		clearFloor(elevator)
+		OpenDoor(elevator, timerAction)
 	} else {
 		slog.Debug("Continuing past floor",
 			"floor", floor,
@@ -80,7 +61,7 @@ func HandleFloorArrival(elevator *types.Elevator, floor int, timerAction chan ti
 	}
 }
 
-// Stops elevator and opens door.
+// Monitors obstruction state and stops elevator and door from closing if obstruction is detected.
 func HandleObstruction(elevator *types.Elevator, obstruction bool, timerAction chan timer.TimerAction) {
 	elevator.Obstructed = obstruction
 	slog.Debug("Obstruction state changed",
@@ -91,11 +72,7 @@ func HandleObstruction(elevator *types.Elevator, obstruction bool, timerAction c
 	if obstruction {
 		elevio.SetMotorDirection(types.MD_Stop)
 		if elevio.GetFloor() != -1 {
-			if err := openDoor(elevator, timerAction); err == nil {
-				slog.Debug("Door opened due to obstruction", "floor", elevator.Floor)
-			} else {
-				slog.Error("Failed to open door on obstruction", "error", err, "floor", elevator.Floor)
-			}
+			OpenDoor(elevator, timerAction)
 		} else {
 			elevator.Behaviour = types.Idle
 			slog.Debug("Stopped between floors due to obstruction")
@@ -109,11 +86,7 @@ func HandleObstruction(elevator *types.Elevator, obstruction bool, timerAction c
 			elevator.Dir = pair.Dir
 
 			if pair.Behaviour == types.Moving {
-				if err := moveElev(elevator); err == nil {
-					slog.Debug("Obstruction cleared, resuming movement", "direction", elevator.Dir)
-				} else {
-					slog.Error("Failed to resume after obstruction", "error", err, "floor", elevator.Floor)
-				}
+				moveMotor(elevator)
 			}
 		}
 	}
@@ -152,23 +125,55 @@ func HandleDoorTimeout(elevator *types.Elevator, timerAction chan timer.TimerAct
 	elevator.Dir = pair.Dir
 
 	if pair.Behaviour == types.Moving {
-		if err := moveElev(elevator); err == nil {
-			slog.Debug("Starting movement", "direction", elevator.Dir, "floor", elevator.Floor)
-		} else {
-			slog.Error("Failed to start movement", "error", err, "floor", elevator.Floor, "current_behaviour", elevator.Behaviour)
-		}
+		moveMotor(elevator)
 	}
 }
 
 // Open door, update state. Includes safety check to avoid opening door while moving.
-func openDoor(elevator *types.Elevator, timerAction chan timer.TimerAction) error {
-	if elevator.Behaviour == types.Moving {
-		return fmt.Errorf("cannot open door while moving")
+func OpenDoor(elevator *types.Elevator, timerAction chan timer.TimerAction) {
+	if elevator.Behaviour == types.Moving || elevio.GetFloor() == -1 {
+		slog.Warn("Cannot open door while moving or between floors")
+		return
 	}
 	elevator.Behaviour = types.DoorOpen
 	elevio.SetDoorOpenLamp(true)
 	timerAction <- timer.Start
-	return nil
+}
+
+// Move motor with safety check to avoid moving while door is open.
+func moveMotor(elevator *types.Elevator) {
+	if elevator.Behaviour == types.DoorOpen {
+		slog.Debug("Cannot move while door is open")
+		return
+	}
+	elevator.Behaviour = types.Moving
+	elevio.SetMotorDirection(elevator.Dir)
+}
+
+
+// Algorithm that only goes as far as the final order in that direction, then reverses.
+func chooseDirInit(elevator *types.Elevator) types.DirnBehaviourPair {
+	var pair types.DirnBehaviourPair
+
+	if elevator.Dir == types.MD_Stop {
+		if ordersAbove(elevator) > 0 {
+			pair = types.DirnBehaviourPair{Dir: types.MD_UP, Behaviour: types.Moving}
+		} else if ordersBelow(elevator) > 0 {
+			pair = types.DirnBehaviourPair{Dir: types.MD_Down, Behaviour: types.Moving}
+		} else {
+			pair = types.DirnBehaviourPair{Dir: types.MD_Stop, Behaviour: types.Idle}
+		}
+	} else {
+		pair = chooseDirWhileMoving(elevator, elevator.Dir)
+	}
+
+	if pair.Behaviour == types.Moving {
+		if elevator.Behaviour == types.DoorOpen {
+			pair.Behaviour = types.Idle
+			pair.Dir = types.MD_Stop
+		}
+	}
+	return pair
 }
 
 func chooseDirWhileMoving(elevator *types.Elevator, dir types.MotorDirection) types.DirnBehaviourPair {
@@ -197,107 +202,19 @@ func chooseDirWhileMoving(elevator *types.Elevator, dir types.MotorDirection) ty
 	return types.DirnBehaviourPair{Dir: types.MD_Stop, Behaviour: types.Idle}
 }
 
-// Uses the elevator algorithm (SCAN) to choose direction.
-func chooseDirInit(elevator *types.Elevator) types.DirnBehaviourPair {
-	var pair types.DirnBehaviourPair
-
-	if elevator.Dir == types.MD_Stop {
-		if ordersAbove(elevator) > 0 {
-			pair = types.DirnBehaviourPair{Dir: types.MD_UP, Behaviour: types.Moving}
-		} else if ordersBelow(elevator) > 0 {
-			pair = types.DirnBehaviourPair{Dir: types.MD_Down, Behaviour: types.Moving}
-		} else {
-			pair = types.DirnBehaviourPair{Dir: types.MD_Stop, Behaviour: types.Idle}
-		}
-	} else {
-		pair = chooseDirWhileMoving(elevator, elevator.Dir)
-	}
-
-	// Validate state transition if moving.
-	if pair.Behaviour == types.Moving {
-		if elevator.Behaviour == types.DoorOpen {
-			pair.Behaviour = types.Idle
-			pair.Dir = types.MD_Stop
-		}
-	}
-	return pair
-}
-
-func shouldStop(elevator *types.Elevator, btn types.ButtonType) bool {
+func shouldStop(elevator *types.Elevator) bool {
 	currentorders := elevator.Orders[elevator.Floor]
-	// At edge floors, stop if any order is set.
-	if elevator.Floor == 0 || elevator.Floor == config.N_FLOORS-1 {
-		if currentorders[types.BT_HallUp] || currentorders[types.BT_HallDown] || currentorders[types.BT_Cab] {
-			return true
-		}
-		return false
-	}
-	switch elevator.Dir {
-	case types.MD_Down:
-		// Check if the button from the event is set
-		return currentorders[btn] || currentorders[types.BT_Cab]
-	case types.MD_UP:
-		return currentorders[btn] || currentorders[types.BT_Cab]
-	case types.MD_Stop:
+
+	if currentorders[types.BT_Cab] ||
+		currentorders[types.BT_HallUp] ||
+		currentorders[types.BT_HallDown] {
 		return true
-	default:
-		return false
 	}
-}
 
-// Clears cab order and current direction hall order and lamp.
-func clearFloor(elevator *types.Elevator) {
-	clearOrderAndLamp(elevator, types.BT_Cab)
-
-	// At edge floors, clear all orders.
+	// Always stop at edge floors
 	if elevator.Floor == 0 || elevator.Floor == config.N_FLOORS-1 {
-		clearOrderAndLamp(elevator, types.BT_HallUp)
-		clearOrderAndLamp(elevator, types.BT_HallDown)
-		return
+		return true
 	}
 
-	switch elevator.Dir {
-	case types.MD_UP:
-		clearOrderAndLamp(elevator, types.BT_HallUp)
-		if ordersAbove(elevator) == 0 {
-			clearOrderAndLamp(elevator, types.BT_HallDown)
-		}
-	case types.MD_Down:
-		clearOrderAndLamp(elevator, types.BT_HallDown)
-		if ordersBelow(elevator) == 0 {
-			clearOrderAndLamp(elevator, types.BT_HallUp)
-		}
-	case types.MD_Stop:
-		clearOrderAndLamp(elevator, types.BT_HallUp)
-		clearOrderAndLamp(elevator, types.BT_HallDown)
-	}
-}
-
-// Clears order and lamp for button press.
-func clearOrderAndLamp(elevator *types.Elevator, btn types.ButtonType) {
-	elevator.Orders[elevator.Floor][btn] = false
-	elevio.SetButtonLamp(btn, elevator.Floor, false)
-}
-
-func countOrders(elevator *types.Elevator, startFloor int, endFloor int) (result int) {
-	for floor := startFloor; floor < endFloor; floor++ {
-		for btn := 0; btn < config.N_BUTTONS; btn++ {
-			if elevator.Orders[floor][btn] {
-				result++
-			}
-		}
-	}
-	return result
-}
-
-func ordersAbove(elevator *types.Elevator) int {
-	return countOrders(elevator, elevator.Floor+1, config.N_FLOORS)
-}
-
-func ordersBelow(elevator *types.Elevator) int {
-	return countOrders(elevator, 0, elevator.Floor)
-}
-
-func ordersHere(elevator *types.Elevator) int {
-	return countOrders(elevator, elevator.Floor, elevator.Floor+1)
+	return false
 }

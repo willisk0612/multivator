@@ -41,16 +41,14 @@ func main() {
 	doorTimerAction := make(chan timer.TimerAction)
 
 	outMsgCh := make(chan types.Message)
-	btnEventCh := make(chan types.ButtonEvent)
-	assignmentCh := make(chan types.OrderAssignment)
+	hallEventCh := make(chan types.ButtonEvent)
 
 	go elevio.PollButtons(drv_buttons)
 	go elevio.PollFloorSensor(drv_floors)
 	go elevio.PollObstructionSwitch(drv_obstr)
 	go elevio.PollStopButton(drv_stop)
 	go timer.Timer(doorTimerDuration, doorTimerTimeout, doorTimerAction)
-	// Pass mgr.Get as the getter function.
-	go network.PollMessages(mgr.Get, btnEventCh, assignmentCh)
+	go network.PollMessages(elevator, mgr, hallEventCh, outMsgCh, doorTimerAction)
 
 	slog.Info("Driver initialized", "port", port)
 
@@ -59,7 +57,7 @@ func main() {
 		case btn := <-drv_buttons:
 			mgr.Execute(elev.ElevatorCmd{
 				Exec: func(e *types.Elevator) {
-					elev.HandleButtonPress(e, btn, doorTimerAction, btnEventCh, outMsgCh, assignmentCh)
+					elev.HandleButtonPress(e, btn, doorTimerAction, hallEventCh, outMsgCh)
 				},
 			})
 		case floor := <-drv_floors:
@@ -86,17 +84,6 @@ func main() {
 					elev.HandleDoorTimeout(e, doorTimerAction)
 				},
 			})
-		case assignment := <-assignmentCh:
-			// Process order if locally assigned.
-			if assignment.IsLocal {
-				mgr.Execute(elev.ElevatorCmd{
-					Exec: func(e *types.Elevator) {
-						if err := elev.ProcessOrder(e, assignment.Event.Floor, assignment.Event.Button, doorTimerAction); err != nil {
-							slog.Error("Failed to process order", "error", err, "event", assignment.Event)
-						}
-					},
-				})
-			}
 		}
 	}
 }
