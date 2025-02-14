@@ -16,8 +16,31 @@ const (
 	peersPort     = 15648
 	ackTimeout    = 500 * time.Millisecond
 )
+func PollMessages(elevator *types.Elevator, mgr *elev.ElevatorManager, hallEventCh <-chan types.ButtonEvent, outgoingMsg chan types.Message, timerAction chan timer.TimerAction) {
+	nodeIDStr := fmt.Sprintf("node-%d", elevator.NodeID)
+	incomingMsg := make(chan types.Message)
+	peerUpdate := make(chan types.PeerUpdate)
+	go bcast.Receiver(broadcastPort, incomingMsg)
+	go bcast.Transmitter(broadcastPort, outgoingMsg)
+	go peers.Transmitter(peersPort, nodeIDStr, make(chan bool))
+	go peers.Receiver(peersPort, peerUpdate)
+	go handlePeerUpdates(peerUpdate)
+	go createBidMsg(elevator, hallEventCh, outgoingMsg)
+	go peerManager()
 
-func HandleMessageEvent(elevator *types.Elevator, mgr *elev.ElevatorManager, inMsg types.Message, outMsgCh chan<- types.Message, timerAction chan timer.TimerAction) {
+	// Incomming messages are coming
+	for msg := range incomingMsg {
+		mgr.Execute(elev.ElevatorCmd{
+			Exec: func(elevator *types.Elevator) {
+				handleMessageEvent(elevator, mgr, msg, outgoingMsg, timerAction)
+			},
+		})
+	}
+	select {}
+}
+
+// Handles messages by listening
+func handleMessageEvent(elevator *types.Elevator, mgr *elev.ElevatorManager, inMsg types.Message, outMsgCh chan<- types.Message, timerAction chan timer.TimerAction) {
 	switch inMsg.Type {
 	case types.HallOrder:
 		numPeers := len(getCurrentPeers())
@@ -76,26 +99,4 @@ func HandleMessageEvent(elevator *types.Elevator, mgr *elev.ElevatorManager, inM
 			}
 		}
 	}
-}
-
-func PollMessages(elevator *types.Elevator, mgr *elev.ElevatorManager, hallEventCh <-chan types.ButtonEvent, outgoingMsg chan types.Message, timerAction chan timer.TimerAction) {
-	nodeIDStr := fmt.Sprintf("node-%d", mgr.Get().NodeID)
-	incomingMsg := make(chan types.Message)
-	peerUpdate := make(chan types.PeerUpdate)
-	go bcast.Receiver(broadcastPort, incomingMsg)
-	go bcast.Transmitter(broadcastPort, outgoingMsg)
-	go peers.Transmitter(peersPort, nodeIDStr, make(chan bool))
-	go peers.Receiver(peersPort, peerUpdate)
-	go handlePeerUpdates(peerUpdate)
-	go createBidMsg(elevator, hallEventCh, outgoingMsg)
-	go peerManager()
-
-	for msg := range incomingMsg {
-		mgr.Execute(elev.ElevatorCmd{
-			Exec: func(elevator *types.Elevator) {
-				HandleMessageEvent(elevator, mgr, msg, outgoingMsg, timerAction)
-			},
-		})
-	}
-	select {}
 }

@@ -150,7 +150,6 @@ func moveMotor(elevator *types.Elevator) {
 	elevio.SetMotorDirection(elevator.Dir)
 }
 
-
 // Algorithm that only goes as far as the final order in that direction, then reverses.
 func chooseDirInit(elevator *types.Elevator) types.DirnBehaviourPair {
 	var pair types.DirnBehaviourPair

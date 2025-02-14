@@ -1,18 +1,15 @@
 package elev
 
 import (
-	"main/src/types"
-	"main/src/config"
 	"main/lib/driver-go/elevio"
+	"main/src/config"
+	"main/src/types"
 )
 
 // Clears cab order and current direction hall order and lamp.
 func clearFloor(elevator *types.Elevator) {
-	// Always clear cab order if passing by
 	clearOrderAndLamp(elevator, types.BT_Cab)
 	shouldClear := clearOrdersAtFloor(elevator)
-
-	// Loop through each button type and clear if indicated.
 	for btn := 0; btn < config.N_BUTTONS; btn++ {
 		if shouldClear[btn] {
 			clearOrderAndLamp(elevator, types.ButtonType(btn))
@@ -50,13 +47,10 @@ func clearOrdersAtFloor(elevator *types.Elevator) [config.N_BUTTONS]bool {
 	return shouldClear
 }
 
-
-// Clears order and lamp for button press.
 func clearOrderAndLamp(elevator *types.Elevator, btn types.ButtonType) {
 	elevator.Orders[elevator.Floor][btn] = false
 	elevio.SetButtonLamp(btn, elevator.Floor, false)
 }
-
 
 func countOrders(elevator *types.Elevator, startFloor int, endFloor int) (result int) {
 	for floor := startFloor; floor < endFloor; floor++ {

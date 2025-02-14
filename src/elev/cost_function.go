@@ -51,4 +51,3 @@ func TimeToServedOrder(btnEvent types.ButtonEvent, elevCopy types.Elevator) time
 		duration += time.Duration(config.TRAVEL_DURATION)
 	}
 }
-
