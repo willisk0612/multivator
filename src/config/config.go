@@ -3,9 +3,9 @@ package config
 import "time"
 
 const (
-	N_FLOORS           = 4
-	N_BUTTONS          = 3
-	SENSOR_POLLRATE    = 25 * time.Millisecond
-	DOOR_OPEN_DURATION = 3 * time.Second
-	TRAVEL_DURATION    = 2 * time.Second
+	NumFloors        = 4
+	NumButtons       = 3
+	SensorPollRate   = 25 * time.Millisecond
+	DoorOpenDuration = 3 * time.Second
+	TravelDuration   = 2 * time.Second
 )

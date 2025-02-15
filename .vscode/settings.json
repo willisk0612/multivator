@@ -14,8 +14,8 @@
             "name": "Format Go Files"
         },
         {
-            "command": "golangci-lint run",
-            "name": "Check Go code for issues"
+            "command": "golangci-lint run --enable-all --disable revive",
+            "name": "Run lint checks"
         }
     ],
 }

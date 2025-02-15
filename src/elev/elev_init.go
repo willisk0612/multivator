@@ -12,7 +12,7 @@ import (
 // InitLogger sets up global logging configuration with compact time format
 func InitLogger() {
 	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
+		Level: slog.LevelInfo,
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
 			if a.Key == slog.TimeKey {
 				if t, ok := a.Value.Any().(time.Time); ok {
@@ -30,7 +30,7 @@ func InitElevator(nodeID int) *types.Elevator {
 	elevator := &types.Elevator{
 		NodeID:    nodeID,
 		Dir:       types.MD_Stop,
-		Orders:    [config.N_FLOORS][config.N_BUTTONS]bool{},
+		Orders:    [config.NumFloors][config.NumButtons]bool{},
 		Behaviour: types.Idle,
 	}
 	slog.Debug("Elevator initialized", "nodeID", nodeID)

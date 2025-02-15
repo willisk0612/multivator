@@ -25,7 +25,7 @@ func main() {
 		}
 	}
 
-	elevio.Init(fmt.Sprintf("localhost:%d", port), config.N_FLOORS)
+	elevio.Init(fmt.Sprintf("localhost:%d", port), config.NumFloors)
 	nodeID := network.AssignNodeID()
 	// Initialize elevator and wrap it in the manager.
 	elevator := elev.InitSystem(nodeID)
@@ -36,7 +36,7 @@ func main() {
 	drv_obstr := make(chan bool)
 	drv_stop := make(chan bool)
 
-	doorTimerDuration := time.NewTimer(config.DOOR_OPEN_DURATION)
+	doorTimerDuration := time.NewTimer(config.DoorOpenDuration)
 	doorTimerTimeout := make(chan bool)
 	doorTimerAction := make(chan timer.TimerAction)
 
@@ -48,7 +48,7 @@ func main() {
 	go elevio.PollObstructionSwitch(drv_obstr)
 	go elevio.PollStopButton(drv_stop)
 	go timer.Timer(doorTimerDuration, doorTimerTimeout, doorTimerAction)
-	go network.PollMessages(elevator, mgr, hallEventCh, outMsgCh, doorTimerAction)
+	go network.RunNetworkManager(elevator, mgr, hallEventCh, outMsgCh, doorTimerAction)
 
 	slog.Info("Driver initialized", "port", port)
 

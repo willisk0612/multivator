@@ -96,8 +96,8 @@ func HandleObstruction(elevator *types.Elevator, obstruction bool, timerAction c
 func HandleStop(elevator *types.Elevator) {
 	elevio.SetMotorDirection(types.MD_Stop)
 	elevio.SetDoorOpenLamp(false)
-	for f := 0; f < config.N_FLOORS; f++ {
-		for b := types.ButtonType(0); b < config.N_BUTTONS; b++ {
+	for f := range config.NumFloors {
+		for b := types.ButtonType(0); b < config.NumButtons; b++ {
 			elevator.Orders[f][b] = false
 			elevio.SetButtonLamp(b, f, false)
 		}
@@ -211,7 +211,7 @@ func shouldStop(elevator *types.Elevator) bool {
 	}
 
 	// Always stop at edge floors
-	if elevator.Floor == 0 || elevator.Floor == config.N_FLOORS-1 {
+	if elevator.Floor == 0 || elevator.Floor == config.NumFloors-1 {
 		return true
 	}
 

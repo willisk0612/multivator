@@ -10,18 +10,18 @@ import (
 func clearFloor(elevator *types.Elevator) {
 	clearOrderAndLamp(elevator, types.BT_Cab)
 	shouldClear := clearOrdersAtFloor(elevator)
-	for btn := 0; btn < config.N_BUTTONS; btn++ {
+	for btn := range config.NumButtons {
 		if shouldClear[btn] {
 			clearOrderAndLamp(elevator, types.ButtonType(btn))
 		}
 	}
 }
 
-func clearOrdersAtFloor(elevator *types.Elevator) [config.N_BUTTONS]bool {
-	shouldClear := [config.N_BUTTONS]bool{}
+func clearOrdersAtFloor(elevator *types.Elevator) [config.NumButtons]bool {
+	shouldClear := [config.NumButtons]bool{}
 
 	// At edge floors, clear all orders
-	if elevator.Floor == 0 || elevator.Floor == config.N_FLOORS-1 {
+	if elevator.Floor == 0 || elevator.Floor == config.NumFloors-1 {
 		shouldClear[types.BT_HallUp] = true
 		shouldClear[types.BT_HallDown] = true
 		return shouldClear
@@ -54,7 +54,7 @@ func clearOrderAndLamp(elevator *types.Elevator, btn types.ButtonType) {
 
 func countOrders(elevator *types.Elevator, startFloor int, endFloor int) (result int) {
 	for floor := startFloor; floor < endFloor; floor++ {
-		for btn := 0; btn < config.N_BUTTONS; btn++ {
+		for btn := range config.NumButtons {
 			if elevator.Orders[floor][btn] {
 				result++
 			}
@@ -64,7 +64,7 @@ func countOrders(elevator *types.Elevator, startFloor int, endFloor int) (result
 }
 
 func ordersAbove(elevator *types.Elevator) int {
-	return countOrders(elevator, elevator.Floor+1, config.N_FLOORS)
+	return countOrders(elevator, elevator.Floor+1, config.NumFloors)
 }
 
 func ordersBelow(elevator *types.Elevator) int {

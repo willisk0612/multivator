@@ -28,7 +28,7 @@ func Timer(duration *time.Timer, timeout chan bool, action <-chan TimerAction) {
 	}
 }
 
-// Stops the timer and resets it
+// Stops the timer and resets it.
 func resetTimer(t *time.Timer) {
 	if !t.Stop() {
 		select {
@@ -36,5 +36,5 @@ func resetTimer(t *time.Timer) {
 		default:
 		}
 	}
-	t.Reset(config.DOOR_OPEN_DURATION)
+	t.Reset(config.DoorOpenDuration)
 }

@@ -53,10 +53,10 @@ func SetStopLamp(value bool) {
 }
 
 func PollButtons(receiver chan<- types.ButtonEvent) {
-	prev := make([][3]bool, config.N_FLOORS)
+	prev := make([][3]bool, config.NumFloors)
 	for {
-		time.Sleep(config.SENSOR_POLLRATE)
-		for f := 0; f < config.N_FLOORS; f++ {
+		time.Sleep(config.SensorPollRate)
+		for f := 0; f < config.NumFloors; f++ {
 			for b := types.ButtonType(0); b < 3; b++ {
 				v := GetButton(b, f)
 				if v != prev[f][b] && v {
@@ -73,7 +73,7 @@ func PollButtons(receiver chan<- types.ButtonEvent) {
 func PollFloorSensor(receiver chan<- int) {
 	prev := -1
 	for {
-		time.Sleep(config.SENSOR_POLLRATE)
+		time.Sleep(config.SensorPollRate)
 		v := GetFloor()
 		if v != prev && v != -1 {
 			receiver <- v
@@ -85,7 +85,7 @@ func PollFloorSensor(receiver chan<- int) {
 func PollStopButton(receiver chan<- bool) {
 	prev := false
 	for {
-		time.Sleep(config.SENSOR_POLLRATE)
+		time.Sleep(config.SensorPollRate)
 		v := GetStop()
 		if v != prev {
 			receiver <- v
@@ -97,7 +97,7 @@ func PollStopButton(receiver chan<- bool) {
 func PollObstructionSwitch(receiver chan<- bool) {
 	prev := false
 	for {
-		time.Sleep(config.SENSOR_POLLRATE)
+		time.Sleep(config.SensorPollRate)
 		v := GetObstruction()
 		if v != prev {
 			receiver <- v
