@@ -15,19 +15,16 @@ const (
 	peerUpdateTimeout  = 100 * time.Millisecond
 	messageRepetitions = 5
 	messageInterval    = 50 * time.Millisecond
-)
-
-var (
-	BroadcastPort = 15657
-	PeersPort     = 15658
+	broadcastPort      = 15657
+	PeersPort          = 15658
 )
 
 func RunNetworkManager(elevator *types.Elevator, mgr *elev.ElevatorManager, hallEventCh chan types.ButtonEvent, outgoingMsg chan types.Message, timerAction chan timer.TimerAction) {
 	nodeIDStr := fmt.Sprintf("node-%d", elevator.NodeID)
 	incomingMsg := make(chan types.Message)
 	peerUpdateCh := make(chan types.PeerUpdate)
-	go bcast.Receiver(BroadcastPort, incomingMsg)
-	go bcast.Transmitter(BroadcastPort, outgoingMsg)
+	go bcast.Receiver(broadcastPort, incomingMsg)
+	go bcast.Transmitter(broadcastPort, outgoingMsg)
 	go peers.Transmitter(PeersPort, nodeIDStr, make(chan bool))
 	go peers.Receiver(PeersPort, peerUpdateCh)
 	go createBidMsg(elevator, hallEventCh, outgoingMsg)
@@ -57,6 +54,7 @@ func handleMessageEvent(elevator *types.Elevator, inMsg types.Message, outMsgCh 
 // Modified handleHallOrder to ensure we send our own bid
 func handleHallOrder(elevator *types.Elevator, inMsg types.Message, outMsgCh chan<- types.Message, timerAction chan timer.TimerAction) {
 	numPeers := len(getCurrentPeers())
+	// Single elevator system
 	if numPeers < 2 {
 		elev.MoveElevator(elevator, inMsg.Event, timerAction)
 		return
@@ -116,8 +114,11 @@ func handleBidMessage(elevator *types.Elevator, inMsg types.Message, timerAction
 		})
 
 		numPeers := len(getCurrentPeers())
-		if len(elevator.EventBids[i].Bids) == numPeers {
+		bidLenght := len(elevator.EventBids[i].Bids)
+		slog.Debug("Received bid", "numPeers", numPeers, "bidLength", bidLenght)
+		if bidLenght == numPeers {
 			assignment := findBestBid(elevator.EventBids[i], elevator.NodeID)
+			slog.Debug("Found best bid", "assignment", assignment)
 			if assignment.IsLocal {
 				slog.Info("This node won the bid",
 					"event", assignment.Event,

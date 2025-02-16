@@ -17,15 +17,15 @@ import (
 func main() {
 	elev.InitLogger()
 
+	port := 15657
 	// Check if port number provided as argument
 	if len(os.Args) > 1 {
 		if p, err := strconv.Atoi(os.Args[1]); err == nil {
-			network.BroadcastPort = p
-			network.PeersPort = p + 1
+			port = p
 		}
 	}
 
-	elevio.Init(fmt.Sprintf("localhost:%d", network.BroadcastPort), config.NumFloors)
+	elevio.Init(fmt.Sprintf("localhost:%d", port), config.NumFloors)
 	nodeID := network.AssignNodeID()
 
 	elevator := elev.InitSystem(nodeID)
@@ -50,7 +50,7 @@ func main() {
 	go timer.Timer(doorTimerDuration, doorTimerTimeout, doorTimerAction)
 	go network.RunNetworkManager(elevator, mgr, hallEventCh, outMsgCh, doorTimerAction)
 
-	slog.Info("Driver initialized", "port", network.BroadcastPort)
+	slog.Info("Driver initialized", "port", port, "nodeID", nodeID)
 
 	for {
 		select {
