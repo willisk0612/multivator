@@ -9,12 +9,13 @@ type Elevator struct {
 	Orders     [config.NumFloors][config.NumButtons]bool
 	Behaviour  ElevatorBehaviour
 	Obstructed bool
+	EventBids  []EventBidsPair
 }
 
 type MotorDirection int
 
 const (
-	MD_UP   MotorDirection = 1
+	MD_Up   MotorDirection = 1
 	MD_Down MotorDirection = -1
 	MD_Stop MotorDirection = 0
 )

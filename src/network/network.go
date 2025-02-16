@@ -12,22 +12,26 @@ import (
 )
 
 const (
-	broadcastPort     = 15647
-	peersPort         = 15648
-	ackTimeout        = 500 * time.Millisecond
-	peerUpdateTimeout = 100 * time.Millisecond
+	peerUpdateTimeout  = 100 * time.Millisecond
+	messageRepetitions = 5
+	messageInterval    = 50 * time.Millisecond
 )
 
-func RunNetworkManager(elevator *types.Elevator, mgr *elev.ElevatorManager, hallEventCh <-chan types.ButtonEvent, outgoingMsg chan types.Message, timerAction chan timer.TimerAction) {
+var (
+	BroadcastPort = 15657
+	PeersPort     = 15658
+)
+
+func RunNetworkManager(elevator *types.Elevator, mgr *elev.ElevatorManager, hallEventCh chan types.ButtonEvent, outgoingMsg chan types.Message, timerAction chan timer.TimerAction) {
 	nodeIDStr := fmt.Sprintf("node-%d", elevator.NodeID)
 	incomingMsg := make(chan types.Message)
 	peerUpdateCh := make(chan types.PeerUpdate)
-	go bcast.Receiver(broadcastPort, incomingMsg)
-	go bcast.Transmitter(broadcastPort, outgoingMsg)
-	go peers.Transmitter(peersPort, nodeIDStr, make(chan bool))
-	go peers.Receiver(peersPort, peerUpdateCh)
-	go handlePeerUpdates(peerUpdateCh)
+	go bcast.Receiver(BroadcastPort, incomingMsg)
+	go bcast.Transmitter(BroadcastPort, outgoingMsg)
+	go peers.Transmitter(PeersPort, nodeIDStr, make(chan bool))
+	go peers.Receiver(PeersPort, peerUpdateCh)
 	go createBidMsg(elevator, hallEventCh, outgoingMsg)
+	go handlePeerUpdates(peerUpdateCh)
 	go peerManager()
 
 	for msg := range incomingMsg {
@@ -40,8 +44,8 @@ func RunNetworkManager(elevator *types.Elevator, mgr *elev.ElevatorManager, hall
 	select {}
 }
 
-// handleMessageEvent handles messages from bcast.Receiver 
-func handleMessageEvent(elevator *types.Elevator, inMsg types.Message, outMsgCh chan<- types.Message, timerAction chan timer.TimerAction) {
+// handleMessageEvent handles messages from bcast.Receiver
+func handleMessageEvent(elevator *types.Elevator, inMsg types.Message, outMsgCh chan types.Message, timerAction chan timer.TimerAction) {
 	switch inMsg.Type {
 	case types.HallOrder:
 		handleHallOrder(elevator, inMsg, outMsgCh, timerAction)
@@ -50,23 +54,22 @@ func handleMessageEvent(elevator *types.Elevator, inMsg types.Message, outMsgCh 
 	}
 }
 
-// handleHallOrder adds the hall order to the eventBids array and broadcasts the bid.
+// Modified handleHallOrder to ensure we send our own bid
 func handleHallOrder(elevator *types.Elevator, inMsg types.Message, outMsgCh chan<- types.Message, timerAction chan timer.TimerAction) {
 	numPeers := len(getCurrentPeers())
-	// Transform into single elevator system if only one peer
 	if numPeers < 2 {
 		elev.MoveElevator(elevator, inMsg.Event, timerAction)
 		return
 	}
 
-	registerHallOrder(inMsg.Event)
+	registerHallOrder(elevator, inMsg.Event)
 	elevCopy := *elevator
 	bid := elev.TimeToServedOrder(inMsg.Event, elevCopy)
 
-	// Add our own bid to the eventBids array
-	for i := range eventBids {
-		if eventBids[i].Event == inMsg.Event {
-			eventBids[i].Bids = append(eventBids[i].Bids, types.BidEntry{
+	// Add our own bid first
+	for i := range elevator.EventBids {
+		if elevator.EventBids[i].Event == inMsg.Event {
+			elevator.EventBids[i].Bids = append(elevator.EventBids[i].Bids, types.BidEntry{
 				NodeID: elevator.NodeID,
 				Cost:   bid,
 			})
@@ -74,41 +77,60 @@ func handleHallOrder(elevator *types.Elevator, inMsg types.Message, outMsgCh cha
 		}
 	}
 
-	// Broadcast bid to other nodes
-	outMsgCh <- types.Message{
-		Type:     types.Bid,
-		Event:    inMsg.Event,
-		Cost:     bid,
-		SenderID: elevCopy.NodeID,
-	}
+	// Send bid multiple times to ensure delivery
+	go func() {
+		for i := 0; i < messageRepetitions; i++ {
+			outMsgCh <- types.Message{
+				Type:     types.Bid,
+				Event:    inMsg.Event,
+				Cost:     bid,
+				SenderID: elevator.NodeID,
+			}
+			time.Sleep(messageInterval)
+		}
+	}()
 }
 
-// handleBidMessage appends the bid to the eventBids array and checks if all bids are received. If so, find the best bid and move the elevator.
+// Modified handleBidMessage with better bid processing
 func handleBidMessage(elevator *types.Elevator, inMsg types.Message, timerAction chan timer.TimerAction) {
 	if inMsg.SenderID == elevator.NodeID {
-		return // Ignore own bid messages
+		return // Ignore own messages
 	}
 
-	for i := range eventBids {
-		if eventBids[i].Event != inMsg.Event {
+	for i := range elevator.EventBids {
+		if elevator.EventBids[i].Event != inMsg.Event {
 			continue
 		}
 
-		// Add received bid to the event
-		eventBids[i].Bids = append(eventBids[i].Bids, types.BidEntry{
+		// Check if we already have a bid from this sender
+		for _, existingBid := range elevator.EventBids[i].Bids {
+			if existingBid.NodeID == inMsg.SenderID {
+				return // Skip duplicate bid
+			}
+		}
+
+		// Add new bid
+		elevator.EventBids[i].Bids = append(elevator.EventBids[i].Bids, types.BidEntry{
 			NodeID: inMsg.SenderID,
 			Cost:   inMsg.Cost,
 		})
 
-		// Check if we have received all bids
-		if len(eventBids[i].Bids) == len(getCurrentPeers()) {
-			assignment := findBestBid(eventBids[i], elevator.NodeID)
+		numPeers := len(getCurrentPeers())
+		if len(elevator.EventBids[i].Bids) == numPeers {
+			assignment := findBestBid(elevator.EventBids[i], elevator.NodeID)
 			if assignment.IsLocal {
-				slog.Info("This node won the bid", "event", assignment.Event, "cost", eventBids[i].Bids)
+				slog.Info("This node won the bid",
+					"event", assignment.Event,
+					"cost", assignment.Cost,
+					"totalBids", len(elevator.EventBids[i].Bids))
 				elev.MoveElevator(elevator, assignment.Event, timerAction)
+			} else {
+				slog.Info("Another node won the bid",
+					"event", assignment.Event,
+					"cost", assignment.Cost)
 			}
-			eventBids = append(eventBids[:i], eventBids[i+1:]...) // Remove event from eventBids
+			// Remove event from list
+			elevator.EventBids = append(elevator.EventBids[:i], elevator.EventBids[i+1:]...)
 		}
-		break
 	}
 }

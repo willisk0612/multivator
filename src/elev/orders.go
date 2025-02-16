@@ -29,7 +29,7 @@ func clearOrdersAtFloor(elevator *types.Elevator) [config.NumButtons]bool {
 
 	// Clear hall orders in the same direction
 	switch elevator.Dir {
-	case types.MD_UP:
+	case types.MD_Up:
 		shouldClear[types.BT_HallUp] = true
 		if ordersAbove(elevator) == 0 {
 			shouldClear[types.BT_HallDown] = true

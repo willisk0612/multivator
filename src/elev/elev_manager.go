@@ -1,6 +1,9 @@
 package elev
 
-import "main/src/types"
+import (
+	"main/src/types"
+	"reflect"
+)
 
 // ElevatorCmd encapsulates an operation on the elevator.
 type ElevatorCmd struct {
@@ -24,6 +27,30 @@ func StartElevatorManager(elevator *types.Elevator) *ElevatorManager {
 }
 
 // Execute sends a command to the manager.
-func (mgr *ElevatorManager) Execute(cmd ElevatorCmd) {
-	mgr.cmds <- cmd
+func (mgr *ElevatorManager) Execute(cmd interface{}, args ...interface{}) {
+	switch f := cmd.(type) {
+	case ElevatorCmd:
+		mgr.cmds <- f
+	case func(*types.Elevator):
+		mgr.cmds <- ElevatorCmd{Exec: f}
+	default:
+		// Create closure that captures the arguments
+		mgr.cmds <- ElevatorCmd{
+			Exec: func(e *types.Elevator) {
+				// Use reflection to call the function with the correct arguments
+				reflect.ValueOf(cmd).Call(append(
+					[]reflect.Value{reflect.ValueOf(e)},
+					reflectArgs(args)...,
+				))
+			},
+		}
+	}
+}
+
+func reflectArgs(args []interface{}) []reflect.Value {
+	vals := make([]reflect.Value, len(args))
+	for i, arg := range args {
+		vals[i] = reflect.ValueOf(arg)
+	}
+	return vals
 }

@@ -14,7 +14,7 @@
             "name": "Format Go Files"
         },
         {
-            "command": "golangci-lint run --enable-all --disable revive",
+            "command": "golangci-lint run --disable-all --enable=staticcheck,govet,errcheck,ineffassign,unused,gosec,sqlclosecheck,rowserrcheck,gosimple,prealloc,perfsprint,makezero,gocritic,gofmt,gofumpt,goimports,cyclop,gocyclo,funlen,noctx,containedctx,exportloopref,errorlint,errname,wrapcheck,misspell,stylecheck",
             "name": "Run lint checks"
         }
     ],

@@ -5,11 +5,9 @@ import (
 	"main/src/types"
 )
 
-var eventBids []types.EventBidsPair
-
 func createBidMsg(elevator *types.Elevator, hallEventCh <-chan types.ButtonEvent, outgoingMsgCh chan<- types.Message) {
 	for event := range hallEventCh {
-		registerHallOrder(event)
+		registerHallOrder(elevator, event)
 
 		numPeers := len(getCurrentPeers())
 		slog.Info("Received hall call", "event", event, "connectedPeers", numPeers)
@@ -20,15 +18,6 @@ func createBidMsg(elevator *types.Elevator, hallEventCh <-chan types.ButtonEvent
 		}
 		outgoingMsgCh <- msg
 	}
-}
-
-func eventAlreadyRegistered(event types.ButtonEvent) bool {
-	for _, ebp := range eventBids {
-		if ebp.Event == event {
-			return true
-		}
-	}
-	return false
 }
 
 func findBestBid(ebp types.EventBidsPair, localNodeID int) types.OrderAssignment {
@@ -46,6 +35,7 @@ func findBestBid(ebp types.EventBidsPair, localNodeID int) types.OrderAssignment
 			bestBid = bid
 		}
 	}
+
 	return types.OrderAssignment{
 		Event:   ebp.Event,
 		Cost:    bestBid.Cost,
@@ -53,10 +43,19 @@ func findBestBid(ebp types.EventBidsPair, localNodeID int) types.OrderAssignment
 	}
 }
 
+func eventAlreadyRegistered(elevator *types.Elevator, event types.ButtonEvent) bool {
+	for _, ebp := range elevator.EventBids {
+		if ebp.Event == event {
+			return true
+		}
+	}
+	return false
+}
+
 // registerHallOrder creates/modifies eventBids on a hall order
-func registerHallOrder(event types.ButtonEvent) {
-	if !eventAlreadyRegistered(event) {
-		eventBids = append(eventBids, types.EventBidsPair{
+func registerHallOrder(elevator *types.Elevator, event types.ButtonEvent) {
+	if !eventAlreadyRegistered(elevator, event) {
+		elevator.EventBids = append(elevator.EventBids, types.EventBidsPair{
 			Event: event,
 			Bids:  []types.BidEntry{},
 		})

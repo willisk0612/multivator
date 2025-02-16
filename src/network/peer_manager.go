@@ -45,7 +45,7 @@ func handlePeerUpdates(peerUpdateCh <-chan types.PeerUpdate) {
 // AssignNodeID assigns lowest available node ID to the elevator
 func AssignNodeID() int {
 	peerUpdateCh := make(chan types.PeerUpdate)
-	go peers.Receiver(peersPort, peerUpdateCh)
+	go peers.Receiver(PeersPort, peerUpdateCh)
 	deadline := time.After(peerUpdateTimeout)
 	var peersList []string
 	for {

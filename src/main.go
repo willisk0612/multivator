@@ -17,17 +17,17 @@ import (
 func main() {
 	elev.InitLogger()
 
-	port := 15657
 	// Check if port number provided as argument
 	if len(os.Args) > 1 {
 		if p, err := strconv.Atoi(os.Args[1]); err == nil {
-			port = p
+			network.BroadcastPort = p
+			network.PeersPort = p + 1
 		}
 	}
 
-	elevio.Init(fmt.Sprintf("localhost:%d", port), config.NumFloors)
+	elevio.Init(fmt.Sprintf("localhost:%d", network.BroadcastPort), config.NumFloors)
 	nodeID := network.AssignNodeID()
-	// Initialize elevator and wrap it in the manager.
+
 	elevator := elev.InitSystem(nodeID)
 	mgr := elev.StartElevatorManager(elevator)
 
@@ -50,40 +50,20 @@ func main() {
 	go timer.Timer(doorTimerDuration, doorTimerTimeout, doorTimerAction)
 	go network.RunNetworkManager(elevator, mgr, hallEventCh, outMsgCh, doorTimerAction)
 
-	slog.Info("Driver initialized", "port", port)
+	slog.Info("Driver initialized", "port", network.BroadcastPort)
 
 	for {
 		select {
 		case btn := <-drv_buttons:
-			mgr.Execute(elev.ElevatorCmd{
-				Exec: func(e *types.Elevator) {
-					elev.HandleButtonPress(e, btn, doorTimerAction, hallEventCh, outMsgCh)
-				},
-			})
+			mgr.Execute(elev.HandleButtonPress, btn, doorTimerAction, hallEventCh, outMsgCh)
 		case floor := <-drv_floors:
-			mgr.Execute(elev.ElevatorCmd{
-				Exec: func(e *types.Elevator) {
-					elev.HandleFloorArrival(e, floor, doorTimerAction)
-				},
-			})
+			mgr.Execute(elev.HandleFloorArrival, floor, doorTimerAction)
 		case obstruction := <-drv_obstr:
-			mgr.Execute(elev.ElevatorCmd{
-				Exec: func(e *types.Elevator) {
-					elev.HandleObstruction(e, obstruction, doorTimerAction)
-				},
-			})
+			mgr.Execute(elev.HandleObstruction, obstruction, doorTimerAction)
 		case <-drv_stop:
-			mgr.Execute(elev.ElevatorCmd{
-				Exec: func(e *types.Elevator) {
-					elev.HandleStop(e)
-				},
-			})
+			mgr.Execute(elev.HandleStop)
 		case <-doorTimerTimeout:
-			mgr.Execute(elev.ElevatorCmd{
-				Exec: func(e *types.Elevator) {
-					elev.HandleDoorTimeout(e, doorTimerAction)
-				},
-			})
+			mgr.Execute(elev.HandleDoorTimeout, doorTimerAction)
 		}
 	}
 }
