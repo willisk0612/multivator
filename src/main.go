@@ -64,6 +64,13 @@ func main() {
 			mgr.Execute(elev.HandleStop)
 		case <-doorTimerTimeout:
 			mgr.Execute(elev.HandleDoorTimeout, doorTimerAction)
+			mgr.Execute(elev.ElevatorCmd{
+				Exec: func(elevator *types.Elevator) {
+					if elevator.Behaviour == types.Idle {
+						network.ProcessQueuedOrders(elevator, doorTimerAction)
+					}
+				},
+			})
 		}
 	}
 }

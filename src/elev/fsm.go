@@ -73,6 +73,13 @@ func HandleObstruction(elevator *types.Elevator, obstruction bool, timerAction c
 func HandleStop(elevator *types.Elevator) {
 	elevio.SetMotorDirection(types.MD_Stop)
 	elevio.SetDoorOpenLamp(false)
+
+	// Reset elevator state
+	elevator.Dir = types.MD_Stop
+	elevator.Behaviour = types.Idle
+	elevator.Floor = elevio.GetFloor() // Update current floor
+
+	// Clear all orders and lamps
 	for f := range config.NumFloors {
 		for b := types.ButtonType(0); b < config.NumButtons; b++ {
 			elevator.Orders[f][b] = false
@@ -146,6 +153,7 @@ func moveMotor(elevator *types.Elevator) {
 		return
 	}
 	elevator.Behaviour = types.Moving
+	elevator.Floor = -1
 	elevio.SetMotorDirection(elevator.Dir)
 }
 

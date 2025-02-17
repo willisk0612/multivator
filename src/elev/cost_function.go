@@ -24,6 +24,9 @@ func TimeToServedOrder(btnEvent types.ButtonEvent, elevCopy types.Elevator) time
 
 	// If the elevator had previous orders, calculate time to serve all orders
 	duration := time.Duration(0)
+	if elevCopy.Behaviour == types.DoorOpen {
+		duration += config.DoorOpenDuration
+	}
 	for {
 		if shouldStop(&elevCopy) {
 			shouldClear := clearOrdersAtFloor(&elevCopy)

@@ -7,7 +7,7 @@ import (
 
 func createBidMsg(elevator *types.Elevator, hallEventCh <-chan types.ButtonEvent, outgoingMsgCh chan<- types.Message) {
 	for event := range hallEventCh {
-		registerHallOrder(elevator, event)
+		appendEvent(elevator, event)
 
 		numPeers := len(getCurrentPeers())
 		slog.Info("Received hall call", "event", event, "connectedPeers", numPeers)
@@ -16,7 +16,7 @@ func createBidMsg(elevator *types.Elevator, hallEventCh <-chan types.ButtonEvent
 			Event:    event,
 			SenderID: elevator.NodeID,
 		}
-		outgoingMsgCh <- msg
+		outgoingMsgCh <- msg // Send bid to bcast.Transmitter
 	}
 }
 
@@ -43,6 +43,16 @@ func findBestBid(ebp types.EventBidsPair, localNodeID int) types.OrderAssignment
 	}
 }
 
+// appendEvent creates/modifies eventBids on a hall order
+func appendEvent(elevator *types.Elevator, event types.ButtonEvent) {
+	if !eventAlreadyRegistered(elevator, event) {
+		elevator.EventBids = append(elevator.EventBids, types.EventBidsPair{
+			Event: event,
+			Bids:  []types.BidEntry{},
+		})
+	}
+}
+
 func eventAlreadyRegistered(elevator *types.Elevator, event types.ButtonEvent) bool {
 	for _, ebp := range elevator.EventBids {
 		if ebp.Event == event {
@@ -50,14 +60,4 @@ func eventAlreadyRegistered(elevator *types.Elevator, event types.ButtonEvent) b
 		}
 	}
 	return false
-}
-
-// registerHallOrder creates/modifies eventBids on a hall order
-func registerHallOrder(elevator *types.Elevator, event types.ButtonEvent) {
-	if !eventAlreadyRegistered(elevator, event) {
-		elevator.EventBids = append(elevator.EventBids, types.EventBidsPair{
-			Event: event,
-			Bids:  []types.BidEntry{},
-		})
-	}
 }
