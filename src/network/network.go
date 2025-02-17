@@ -23,7 +23,6 @@ func RunNetworkManager(elevator *types.Elevator, mgr *elev.ElevatorManager, hall
 	nodeIDStr := fmt.Sprintf("node-%d", elevator.NodeID)
 	incomingMsg := make(chan types.Message)
 	peerUpdateCh := make(chan types.PeerUpdate)
-	doorTimeoutCh := make(chan bool)
 
 	// Pass doorTimeoutCh to main.go
 	go bcast.Receiver(broadcastPort, incomingMsg)
@@ -35,53 +34,18 @@ func RunNetworkManager(elevator *types.Elevator, mgr *elev.ElevatorManager, hall
 	go peerManager()
 
 	// Listen for both door timeout and incoming messages
-	for {
-		select {
-		case msg := <-incomingMsg:
-			mgr.Execute(elev.ElevatorCmd{
-				Exec: func(elevator *types.Elevator) {
-					handleMessageEvent(elevator, msg, outgoingMsg, timerAction)
-				},
-			})
-		case <-doorTimeoutCh:
-			mgr.Execute(elev.ElevatorCmd{
-				Exec: func(elevator *types.Elevator) {
-					ProcessQueuedOrders(elevator, timerAction)
-				},
-			})
-		}
+	for msg := range incomingMsg {
+		mgr.Execute(elev.ElevatorCmd{
+			Exec: func(elevator *types.Elevator) {
+				handleMessageEvent(elevator, msg, outgoingMsg, timerAction)
+			},
+		})
 	}
-}
-
-// ProcessQueuedOrders processes queued orders when the door closes
-func ProcessQueuedOrders(elevator *types.Elevator, timerAction chan timer.TimerAction) {
-	if len(elevator.EventBids) == 0 || elevator.Behaviour != types.Idle {
-		return
-	}
-
-	if elevator.Behaviour != types.Idle {
-		return
-	}
-
-	// Process the first queued order
-	nextOrder := elevator.EventBids[0]
-	slog.Debug("Processing queued order",
-		"event", nextOrder.Event)
-
-	elev.MoveElevator(elevator, nextOrder.Event, timerAction)
-	elevator.EventBids = elevator.EventBids[1:]
+	select {}
 }
 
 // handleMessageEvent handles messages from bcast.Receiver
 func handleMessageEvent(elevator *types.Elevator, inMsg types.Message, outMsgCh chan types.Message, timerAction chan timer.TimerAction) {
-	if elevator.Behaviour == types.DoorOpen {
-		if elevator.Floor == inMsg.Event.Floor {
-			return
-		}
-		queueOrder(elevator, inMsg)
-		return
-	}
-
 	numPeers := len(getCurrentPeers())
 	// If numPeers < 2, transform into single elevator system
 	if numPeers < 2 {
@@ -90,6 +54,10 @@ func handleMessageEvent(elevator *types.Elevator, inMsg types.Message, outMsgCh 
 	}
 	switch inMsg.Type {
 	case types.HallOrder:
+		if elevator.Behaviour == types.DoorOpen {
+			elevator.Orders[inMsg.Event.Floor][inMsg.Event.Button] = true
+			return
+		}
 		handleHallOrder(elevator, inMsg, outMsgCh)
 	case types.Bid:
 		handleBidMessage(elevator, inMsg, timerAction)
@@ -171,21 +139,4 @@ func handleBidMessage(elevator *types.Elevator, inMsg types.Message, timerAction
 			elevator.EventBids = append(elevator.EventBids[:i], elevator.EventBids[i+1:]...)
 		}
 	}
-}
-
-// queueOrder queues an order in case the door is open
-func queueOrder(elevator *types.Elevator, msg types.Message) {
-	for _, order := range elevator.EventBids {
-		if order.Event == msg.Event {
-			return // Order already queued
-		}
-	}
-
-	elevator.EventBids = append(elevator.EventBids, types.EventBidsPair{
-		Event: msg.Event,
-		Bids:  []types.BidEntry{},
-	})
-	slog.Debug("Order queued while door open",
-		"event", msg.Event,
-		"queueLength", len(elevator.EventBids))
 }

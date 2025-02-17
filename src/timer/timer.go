@@ -12,9 +12,7 @@ const (
 	Stop
 )
 
-// Store start time to calculate remaining duration
-var startTime time.Time
-var isRunning bool
+
 
 func Timer(duration *time.Timer, timeout chan bool, action <-chan TimerAction) {
 	for {
@@ -22,15 +20,11 @@ func Timer(duration *time.Timer, timeout chan bool, action <-chan TimerAction) {
 		case a := <-action:
 			switch a {
 			case Start:
-				startTime = time.Now()
-				isRunning = true
 				resetTimer(duration)
 			case Stop:
-				isRunning = false
 				duration.Stop()
 			}
 		case <-duration.C:
-			isRunning = false
 			timeout <- true
 		}
 	}
