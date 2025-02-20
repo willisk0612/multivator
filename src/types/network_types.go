@@ -28,8 +28,8 @@ type BidEntry struct {
 }
 
 type EventBidsPair struct {
-	Event        ButtonEvent
-	Bids         []BidEntry
+	Event ButtonEvent
+	Bids  []BidEntry
 }
 
 type OrderAssignment struct {

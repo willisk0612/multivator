@@ -1,9 +1,9 @@
 package timer
 
 import (
+	"log/slog"
 	"main/src/config"
 	"time"
-	"log/slog"
 )
 
 type TimerAction int
@@ -12,8 +12,6 @@ const (
 	Start TimerAction = iota
 	Stop
 )
-
-
 
 func Timer(duration *time.Timer, timeout chan bool, action <-chan TimerAction) {
 	for {

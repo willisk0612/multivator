@@ -1,6 +1,7 @@
 package network
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"main/lib/network-go/network/bcast"
@@ -50,7 +51,7 @@ func HandleHallOrder(elevMgr *types.ElevatorManager, hallEvent types.ButtonEvent
 		select {
 		case costCh <- bid:
 		default:
-			errCh <- fmt.Errorf("cost channel blocked")
+			errCh <- errors.New("cost calculation failed")
 		}
 	}()
 
@@ -117,9 +118,9 @@ func handleBidMessage(elevMgr *types.ElevatorManager, inMsg types.Message, timer
 	// Find matching event bid pair
 	var matchingPair *types.EventBidsPair
 	var pairIndex int
-	for i, ebp := range elevator.EventBids {
-		if ebp.Event == inMsg.Event {
-			matchingPair = &ebp
+	for i := range elevator.EventBids {
+		if elevator.EventBids[i].Event == inMsg.Event {
+			matchingPair = &elevator.EventBids[i]
 			pairIndex = i
 			break
 		}
