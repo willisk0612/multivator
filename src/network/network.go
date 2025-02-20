@@ -14,7 +14,7 @@ import (
 
 const (
 	peerUpdateTimeout  = 100 * time.Millisecond
-	messageRepetitions = 1
+	messageRepetitions = 5
 	messageInterval    = 10 * time.Millisecond
 	broadcastPort      = 15657
 	PeersPort          = 15658
