@@ -2,9 +2,7 @@ package network
 
 import (
 	"log/slog"
-	"main/lib/network-go/network/peers"
 	"main/src/types"
-	"time"
 )
 
 var (
@@ -38,22 +36,6 @@ func handlePeerUpdates(peerUpdateCh <-chan types.PeerUpdate) {
 		}
 		if len(update.Lost) > 0 {
 			slog.Info("Peer(s) lost", "lostPeers", update.Lost, "totalPeers", len(update.Peers))
-		}
-	}
-}
-
-// AssignNodeID assigns lowest available node ID to the elevator
-func AssignNodeID() int {
-	peerUpdateCh := make(chan types.PeerUpdate)
-	go peers.Receiver(PeersPort, peerUpdateCh)
-	deadline := time.After(peerUpdateTimeout)
-	var peersList []string
-	for {
-		select {
-		case update := <-peerUpdateCh:
-			peersList = update.Peers
-		case <-deadline:
-			return len(peersList)
 		}
 	}
 }

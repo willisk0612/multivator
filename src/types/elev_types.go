@@ -3,14 +3,36 @@ package types
 import "main/src/config"
 
 type Elevator struct {
-	NodeID     int
-	Floor      int
-	Dir        MotorDirection
-	Orders     [config.NumFloors][config.NumButtons]bool
-	Behaviour  ElevatorBehaviour
-	Obstructed bool
-	EventBids  []EventBidsPair
+	NodeID        int
+	Floor         int
+	BetweenFloors bool
+	Dir           MotorDirection
+	Orders        [config.NumFloors][config.NumButtons]bool
+	Behaviour     ElevatorBehaviour
+	Obstructed    bool
+	EventBids     []EventBidsPair
 }
+
+type ElevatorCmd struct {
+	Exec func(elevator *Elevator)
+}
+
+// ElevatorManager owns the elevator and serializes its access.
+type ElevatorManager struct {
+	Cmds chan ElevatorCmd
+}
+
+type ElevMgrField string
+
+const (
+	ElevFloor         ElevMgrField = "Floor"
+	ElevBetweenFloors ElevMgrField = "BetweenFloors"
+	ElevDir           ElevMgrField = "Dir"
+	ElevOrders        ElevMgrField = "Orders"
+	ElevBehaviour     ElevMgrField = "Behaviour"
+	ElevObstructed    ElevMgrField = "Obstructed"
+	ElevEventBids     ElevMgrField = "EventBids"
+)
 
 type MotorDirection int
 

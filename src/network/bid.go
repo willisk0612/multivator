@@ -2,22 +2,22 @@ package network
 
 import (
 	"log/slog"
+	"main/src/elev"
 	"main/src/types"
 )
 
-func createBidMsg(elevator *types.Elevator, hallEventCh <-chan types.ButtonEvent, outgoingMsgCh chan<- types.Message) {
-	for event := range hallEventCh {
-		appendEvent(elevator, event)
-
-		numPeers := len(getCurrentPeers())
-		slog.Info("Received hall call", "event", event, "connectedPeers", numPeers)
-		msg := types.Message{
-			Type:     types.HallOrder,
-			Event:    event,
-			SenderID: elevator.NodeID,
-		}
-		outgoingMsgCh <- msg // Send bid to bcast.Transmitter
+func createBidMsg(elevMgr *types.ElevatorManager, inMsg types.Message, outMsgCh chan types.Message) {
+	appendEvent(elevMgr, inMsg.Event)
+	elevator := elev.GetElevState(elevMgr)
+	bid := elev.TimeToServedOrder(elevMgr, inMsg.Event)
+	msg := types.Message{
+		Type:     types.Bid,
+		Event:    inMsg.Event,
+		Cost:     bid,
+		SenderID: elevator.NodeID,
 	}
+	slog.Debug("Created bid", "event", inMsg.Event, "cost", bid)
+	sendMultipleMessages(msg, outMsgCh)
 }
 
 func findBestBid(ebp types.EventBidsPair, localNodeID int) types.OrderAssignment {
@@ -44,16 +44,19 @@ func findBestBid(ebp types.EventBidsPair, localNodeID int) types.OrderAssignment
 }
 
 // appendEvent creates/modifies eventBids on a hall order
-func appendEvent(elevator *types.Elevator, event types.ButtonEvent) {
-	if !eventAlreadyRegistered(elevator, event) {
-		elevator.EventBids = append(elevator.EventBids, types.EventBidsPair{
-			Event: event,
-			Bids:  []types.BidEntry{},
+func appendEvent(elevMgr *types.ElevatorManager, event types.ButtonEvent) {
+	if !eventAlreadyRegistered(elevMgr, event) {
+		elev.UpdateEventBids(elevMgr, func(bids *[]types.EventBidsPair) {
+			*bids = append(*bids, types.EventBidsPair{
+				Event: event,
+				Bids:  []types.BidEntry{},
+			})
 		})
 	}
 }
 
-func eventAlreadyRegistered(elevator *types.Elevator, event types.ButtonEvent) bool {
+func eventAlreadyRegistered(elevMgr *types.ElevatorManager, event types.ButtonEvent) bool {
+	elevator := elev.GetElevState(elevMgr)
 	for _, ebp := range elevator.EventBids {
 		if ebp.Event == event {
 			return true

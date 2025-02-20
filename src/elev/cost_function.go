@@ -1,50 +1,72 @@
 package elev
 
 import (
+	"context"
 	"main/src/config"
 	"main/src/types"
 	"time"
 )
 
-// TimeToServedOrder calculates the time it takes for the elevator to serve an order, given the previous orders and the current elevator state.
-func TimeToServedOrder(btnEvent types.ButtonEvent, elevCopy types.Elevator) time.Duration {
-	// Add the new order to a copy of the current orders
-	var orders [config.NumFloors][config.NumButtons]bool
-	for i := range orders {
-		copy(orders[i][:], elevCopy.Orders[i][:])
-	}
-	elevCopy.Orders = orders
-	elevCopy.Orders[btnEvent.Floor][btnEvent.Button] = true
+// TimeToServedOrder calculates the time it takes for the elevator to serve an order. It runs concurrently with a context based timeout.
+func TimeToServedOrder(elevMgr *types.ElevatorManager, btnEvent types.ButtonEvent) time.Duration {
+	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	defer cancel()
 
-	// If previous no orders, use distance to calculate time
-	if elevCopy.Behaviour == types.Idle {
-		distance := abs(elevCopy.Floor - btnEvent.Floor)
-		return time.Duration(distance) * config.TravelDuration
-	}
+	costCh := make(chan time.Duration, 1)
 
-	// If the elevator had previous orders, calculate time to serve all orders
-	duration := time.Duration(0)
-	if elevCopy.Behaviour == types.DoorOpen {
-		duration += config.DoorOpenDuration
-	}
-	for {
-		if shouldStop(&elevCopy) {
-			shouldClear := clearOrdersAtFloor(&elevCopy)
-			if elevCopy.Floor == btnEvent.Floor && shouldClear[btnEvent.Button] {
-				return duration
-			}
-			// Clear served orders and update direction
-			for b := range config.NumButtons {
-				if shouldClear[b] {
-					elevCopy.Orders[elevCopy.Floor][b] = false
-				}
-			}
-			duration += config.DoorOpenDuration
-			elevCopy.Dir = chooseDirInit(&elevCopy).Dir
+	go func() {
+		elevator := GetElevState(elevMgr)
+		simElev := *elevator
+		simElev.Orders[btnEvent.Floor][btnEvent.Button] = true
+
+		baseCost := time.Duration(0)
+		if simElev.Behaviour == types.DoorOpen {
+			baseCost += config.DoorOpenDuration
+			simElev.Behaviour = types.Idle
 		}
 
-		elevCopy.Floor += int(elevCopy.Dir)
-		duration += config.TravelDuration
+		// For idle elevator, calculate direct path cost
+		if simElev.Behaviour == types.Idle {
+			distance := abs(simElev.Floor - btnEvent.Floor)
+			select {
+			case costCh <- baseCost + (time.Duration(distance) * config.TravelDuration):
+			case <-ctx.Done():
+				return
+			}
+			return
+		}
+
+		// For moving elevator, simulate the time using the existing fsm logic
+		duration := baseCost
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				if simElev.Floor < 0 || simElev.Floor >= config.NumFloors {
+					simElev.Dir = -simElev.Dir
+				}
+				if shouldStop(&simElev) {
+					shouldClear := clearOrdersAtFloor(&simElev)
+					if simElev.Floor == btnEvent.Floor && shouldClear[btnEvent.Button] {
+						costCh <- duration
+						return
+					}
+					duration += config.DoorOpenDuration
+					simElev.Dir = chooseDirInit(elevMgr).Dir
+				}
+
+				simElev.Floor += int(simElev.Dir)
+				duration += config.TravelDuration
+			}
+		}
+	}()
+
+	select {
+	case cost := <-costCh:
+		return cost
+	case <-ctx.Done():
+		return 24 * time.Hour // Return max cost on timeout
 	}
 }
 

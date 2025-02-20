@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log/slog"
 	"main/lib/driver-go/elevio"
@@ -9,27 +10,17 @@ import (
 	"main/src/network"
 	"main/src/timer"
 	"main/src/types"
-	"os"
-	"strconv"
 	"time"
 )
 
 func main() {
+	nodeID := flag.Int("id", 0, "Node ID of the elevator")
+	flag.Parse()
+	port := 15657 + *nodeID
+
 	elev.InitLogger()
-
-	port := 15657
-	// Check if port number provided as argument
-	if len(os.Args) > 1 {
-		if p, err := strconv.Atoi(os.Args[1]); err == nil {
-			port = p
-		}
-	}
-
 	elevio.Init(fmt.Sprintf("localhost:%d", port), config.NumFloors)
-	nodeID := network.AssignNodeID()
-
-	elevator := elev.InitSystem(nodeID)
-	mgr := elev.StartElevatorManager(elevator)
+	elevator := elev.InitSystem(*nodeID)
 
 	drv_buttons := make(chan types.ButtonEvent)
 	drv_floors := make(chan int)
@@ -37,33 +28,38 @@ func main() {
 	drv_stop := make(chan bool)
 
 	doorTimerDuration := time.NewTimer(config.DoorOpenDuration)
-	doorTimerTimeout := make(chan bool)
-	doorTimerAction := make(chan timer.TimerAction)
+	doorTimerTimeout := make(chan bool, 1)
+	doorTimerAction := make(chan timer.TimerAction, 1)
 
 	outMsgCh := make(chan types.Message)
-	hallEventCh := make(chan types.ButtonEvent)
+	elevMgr := elev.StartElevatorManager(elevator)
 
 	go elevio.PollButtons(drv_buttons)
 	go elevio.PollFloorSensor(drv_floors)
 	go elevio.PollObstructionSwitch(drv_obstr)
 	go elevio.PollStopButton(drv_stop)
 	go timer.Timer(doorTimerDuration, doorTimerTimeout, doorTimerAction)
-	go network.RunNetworkManager(elevator, mgr, hallEventCh, outMsgCh, doorTimerAction)
+	go network.RunNetworkManager(elevMgr, outMsgCh, doorTimerAction)
 
 	slog.Info("Driver initialized", "port", port, "nodeID", nodeID)
 
 	for {
 		select {
 		case btn := <-drv_buttons:
-			mgr.Execute(elev.HandleButtonPress, btn, doorTimerAction, hallEventCh, outMsgCh)
+			if btn.Button == types.BT_Cab || elevio.GetFloor() == -1 {
+				elev.MoveElevator(elevMgr, btn, doorTimerAction)
+			} else {
+				slog.Debug("Hall button press discovered in main")
+				network.HandleHallOrder(elevMgr, btn, outMsgCh)
+			}
 		case floor := <-drv_floors:
-			mgr.Execute(elev.HandleFloorArrival, floor, doorTimerAction)
+			elev.HandleFloorArrival(elevMgr, floor, doorTimerAction)
 		case obstruction := <-drv_obstr:
-			mgr.Execute(elev.HandleObstruction, obstruction, doorTimerAction)
+			elev.HandleObstruction(elevMgr, obstruction, doorTimerAction)
 		case <-drv_stop:
-			mgr.Execute(elev.HandleStop)
+			elev.HandleStop(elevMgr)
 		case <-doorTimerTimeout:
-			mgr.Execute(elev.HandleDoorTimeout, doorTimerAction)
+			elev.HandleDoorTimeout(elevMgr, doorTimerAction)
 		}
 	}
 }

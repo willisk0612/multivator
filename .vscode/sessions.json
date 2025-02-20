@@ -18,7 +18,7 @@
                     "name": "main 1",
                     "autoExecuteCommands": true,
                     "commands": [
-                        "go run src/main.go"
+                        "go run src/main.go --id 0"
                     ]
                 }
             ]
@@ -36,7 +36,25 @@
                     "name": "main 2",
                     "autoExecuteCommands": true,
                     "commands": [
-                        "go run src/main.go 15658"
+                        "go run src/main.go --id 1"
+                    ]
+                }
+            ]
+        ],
+        "elev 3": [
+            [
+                {
+                    "name": "Simulator 3",
+                    "autoExecuteCommands": true,
+                    "commands": [
+                        "cd lib/simulator && ./SimElevatorServer.exe --port 15659"
+                    ]
+                },
+                {
+                    "name": "main 3",
+                    "autoExecuteCommands": true,
+                    "commands": [
+                        "go run src/main.go --id 2"
                     ]
                 }
             ]
@@ -54,7 +72,7 @@
                     "name": "main 1 race",
                     "autoExecuteCommands": true,
                     "commands": [
-                        "go run -race src/main.go"
+                        "go run -race src/main.go --id 0"
                     ]
                 }
             ]
@@ -72,7 +90,25 @@
                     "name": "main 2 race",
                     "autoExecuteCommands": true,
                     "commands": [
-                        "go run -race src/main.go 15658"
+                        "go run -race src/main.go --id 1"
+                    ]
+                }
+            ]
+        ],
+        "elev 3 race": [
+            [
+                {
+                    "name": "Simulator 3",
+                    "autoExecuteCommands": true,
+                    "commands": [
+                        "cd lib/simulator && ./SimElevatorServer.exe --port 15659"
+                    ]
+                },
+                {
+                    "name": "main 3 race",
+                    "autoExecuteCommands": true,
+                    "commands": [
+                        "go run -race src/main.go --id 2"
                     ]
                 }
             ]

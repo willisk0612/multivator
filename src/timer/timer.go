@@ -3,6 +3,7 @@ package timer
 import (
 	"main/src/config"
 	"time"
+	"log/slog"
 )
 
 type TimerAction int
@@ -26,6 +27,7 @@ func Timer(duration *time.Timer, timeout chan bool, action <-chan TimerAction) {
 			}
 		case <-duration.C:
 			timeout <- true
+			slog.Debug("Timer timed out")
 		}
 	}
 }

@@ -2,55 +2,65 @@ package elev
 
 import (
 	"main/src/types"
+	"main/src/config"
 	"reflect"
 )
 
-// ElevatorCmd encapsulates an operation on the elevator.
-type ElevatorCmd struct {
-	Exec func(elevator *types.Elevator)
-}
-
-// ElevatorManager owns the elevator and serializes its access.
-type ElevatorManager struct {
-	cmds chan ElevatorCmd
-}
-
 // StartElevatorManager starts the manager goroutine.
-func StartElevatorManager(elevator *types.Elevator) *ElevatorManager {
-	mgr := &ElevatorManager{cmds: make(chan ElevatorCmd)}
+func StartElevatorManager(elevator *types.Elevator) *types.ElevatorManager {
+	elevMgr := &types.ElevatorManager{Cmds: make(chan types.ElevatorCmd)}
 	go func() {
-		for cmd := range mgr.cmds {
+		for cmd := range elevMgr.Cmds {
 			cmd.Exec(elevator)
 		}
 	}()
-	return mgr
+	return elevMgr
 }
 
-// Execute sends a command to the manager.
-func (mgr *ElevatorManager) Execute(cmd interface{}, args ...interface{}) {
-	switch f := cmd.(type) {
-	case ElevatorCmd:
-		mgr.cmds <- f
-	case func(*types.Elevator):
-		mgr.cmds <- ElevatorCmd{Exec: f}
-	default:
-		// Create closure that captures the arguments
-		mgr.cmds <- ElevatorCmd{
-			Exec: func(e *types.Elevator) {
-				// Use reflection to call the function with the correct arguments
-				reflect.ValueOf(cmd).Call(append(
-					[]reflect.Value{reflect.ValueOf(e)},
-					reflectArgs(args)...,
-				))
-			},
-		}
+// GetElevState creates a shallow copy of the elevator state.
+func GetElevState(elevMgr *types.ElevatorManager) *types.Elevator {
+	reply := make(chan *types.Elevator)
+	elevMgr.Cmds <- types.ElevatorCmd{
+		Exec: func(elevator *types.Elevator) {
+			clone := *elevator // shallow copy
+			// NOTE: We are not deep copying the EventBids field!
+			reply <- &clone
+		},
+	}
+	return <-reply
+}
+
+// UpdateState safely updates the elevator state using reflection.
+func UpdateState(elevMgr *types.ElevatorManager, field types.ElevMgrField, value interface{}) {
+	elevMgr.Cmds <- types.ElevatorCmd{
+		Exec: func(e *types.Elevator) {
+			v := reflect.ValueOf(e).Elem()
+			f := v.FieldByName(string(field))
+			if !f.IsValid() || !f.CanSet() {
+				return
+			}
+			val := reflect.ValueOf(value)
+			if val.Type().ConvertibleTo(f.Type()) {
+				f.Set(val.Convert(f.Type()))
+			}
+		},
 	}
 }
 
-func reflectArgs(args []interface{}) []reflect.Value {
-	vals := make([]reflect.Value, len(args))
-	for i, arg := range args {
-		vals[i] = reflect.ValueOf(arg)
+// UpdateOrders applies an update function on the orders array.
+func UpdateOrders(elevMgr *types.ElevatorManager, updateFunc func(orders *[config.NumFloors][config.NumButtons]bool)) {
+	elevMgr.Cmds <- types.ElevatorCmd{
+		Exec: func(elevator *types.Elevator) {
+			updateFunc(&elevator.Orders)
+		},
 	}
-	return vals
+}
+
+// UpdateEventBids applies an update function on the EventBids slice.
+func UpdateEventBids(elevMgr *types.ElevatorManager, updateFunc func(bids *[]types.EventBidsPair)) {
+	elevMgr.Cmds <- types.ElevatorCmd{
+		Exec: func(elevator *types.Elevator) {
+			updateFunc(&elevator.EventBids)
+		},
+	}
 }
