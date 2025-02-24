@@ -1,3 +1,3 @@
-module main
+module multivator
 
 go 1.23

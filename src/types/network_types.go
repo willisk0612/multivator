@@ -5,7 +5,9 @@ import "time"
 type MessageType int
 
 const (
-	HallOrder MessageType = iota
+	LocalHallOrder MessageType = iota
+	LocalHallAssignment
+	NetHallOrder
 	Bid
 )
 

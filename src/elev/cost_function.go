@@ -1,21 +1,22 @@
+// Cost function is calculated and broadcasted every time a button event is stored in the local elevator.
 package elev
 
 import (
 	"context"
-	"main/src/config"
-	"main/src/types"
+	"multivator/src/config"
+	"multivator/src/types"
 	"time"
 )
 
-// TimeToServedOrder calculates the time it takes for the elevator to serve an order. It runs concurrently with a context based timeout.
-func TimeToServedOrder(elevMgr *types.ElevatorManager, btnEvent types.ButtonEvent) time.Duration {
+// TimeToServedOrder calculates the time it takes for the elevator to serve an order. Its calculations are based on distance if the elevator is still, and fsm logic if the elevator is moving.
+func (elevMgr *ElevStateMgr) TimeToServedOrder(btnEvent types.ButtonEvent) time.Duration {
 	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
 	defer cancel()
 
 	costCh := make(chan time.Duration, 1)
 
 	go func() {
-		elevator := GetElevState(elevMgr)
+		elevator := elevMgr.GetState()
 		simElev := *elevator
 		simElev.Orders[btnEvent.Floor][btnEvent.Button] = true
 
@@ -46,14 +47,14 @@ func TimeToServedOrder(elevMgr *types.ElevatorManager, btnEvent types.ButtonEven
 				if simElev.Floor < 0 || simElev.Floor >= config.NumFloors {
 					simElev.Dir = -simElev.Dir
 				}
-				if shouldStop(&simElev) {
-					shouldClear := clearOrdersAtFloor(&simElev)
+				if simElev.shouldStop() {
+					shouldClear := simElev.clearOrdersAtFloor()
 					if simElev.Floor == btnEvent.Floor && shouldClear[btnEvent.Button] {
 						costCh <- duration
 						return
 					}
 					duration += config.DoorOpenDuration
-					simElev.Dir = chooseDirInit(elevMgr).Dir
+					simElev.Dir = elevMgr.chooseDirInit().Dir
 				}
 
 				simElev.Floor += int(simElev.Dir)

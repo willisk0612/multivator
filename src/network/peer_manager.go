@@ -2,7 +2,7 @@ package network
 
 import (
 	"log/slog"
-	"main/src/types"
+	"multivator/src/types"
 )
 
 var (

@@ -2,14 +2,13 @@ package network
 
 import (
 	"log/slog"
-	"main/src/elev"
-	"main/src/types"
+	"multivator/src/types"
 )
 
-func createBidMsg(elevMgr *types.ElevatorManager, inMsg types.Message, outMsgCh chan types.Message) {
-	appendEvent(elevMgr, inMsg.Event)
-	elevator := elev.GetElevState(elevMgr)
-	bid := elev.TimeToServedOrder(elevMgr, inMsg.Event)
+func (elevMgr *ElevStateMgrWrapper) createBidMsg(inMsg types.Message, netOutMsgCh chan types.Message) {
+	elevMgr.appendEvent(inMsg.Event)
+	elevator := elevMgr.GetState()
+	bid := elevMgr.TimeToServedOrder(inMsg.Event)
 	msg := types.Message{
 		Type:     types.Bid,
 		Event:    inMsg.Event,
@@ -17,7 +16,7 @@ func createBidMsg(elevMgr *types.ElevatorManager, inMsg types.Message, outMsgCh 
 		SenderID: elevator.NodeID,
 	}
 	slog.Debug("Created bid", "event", inMsg.Event, "cost", bid)
-	sendMultipleMessages(msg, outMsgCh)
+	sendMultipleMessages(msg, netOutMsgCh)
 }
 
 func findBestBid(ebp types.EventBidsPair, localNodeID int) types.OrderAssignment {
@@ -44,9 +43,9 @@ func findBestBid(ebp types.EventBidsPair, localNodeID int) types.OrderAssignment
 }
 
 // appendEvent creates/modifies eventBids on a hall order
-func appendEvent(elevMgr *types.ElevatorManager, event types.ButtonEvent) {
-	if !eventAlreadyRegistered(elevMgr, event) {
-		elev.UpdateEventBids(elevMgr, func(bids *[]types.EventBidsPair) {
+func (elevMgr *ElevStateMgrWrapper) appendEvent(event types.ButtonEvent) {
+	if !elevMgr.eventAlreadyRegistered(event) {
+		elevMgr.UpdateEventBids(func(bids *[]types.EventBidsPair) {
 			*bids = append(*bids, types.EventBidsPair{
 				Event: event,
 				Bids:  []types.BidEntry{},
@@ -55,8 +54,8 @@ func appendEvent(elevMgr *types.ElevatorManager, event types.ButtonEvent) {
 	}
 }
 
-func eventAlreadyRegistered(elevMgr *types.ElevatorManager, event types.ButtonEvent) bool {
-	elevator := elev.GetElevState(elevMgr)
+func (elevMgr *ElevStateMgrWrapper) eventAlreadyRegistered(event types.ButtonEvent) bool {
+	elevator := elevMgr.GetState()
 	for _, ebp := range elevator.EventBids {
 		if ebp.Event == event {
 			return true

@@ -2,8 +2,8 @@ package peers
 
 import (
 	"fmt"
-	"main/lib/network-go/network/conn"
-	"main/src/types"
+	"multivator/lib/network-go/network/conn"
+	"multivator/src/types"
 	"net"
 	"sort"
 	"time"

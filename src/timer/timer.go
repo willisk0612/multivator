@@ -2,7 +2,7 @@ package timer
 
 import (
 	"log/slog"
-	"main/src/config"
+	"multivator/src/config"
 	"time"
 )
 

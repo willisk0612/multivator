@@ -4,11 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"main/lib/network-go/network/bcast"
-	"main/lib/network-go/network/peers"
-	"main/src/elev"
-	"main/src/timer"
-	"main/src/types"
+	"multivator/lib/network-go/network/bcast"
+	"multivator/lib/network-go/network/peers"
+	"multivator/src/elev"
+	"multivator/src/types"
 	"time"
 )
 
@@ -20,34 +19,47 @@ const (
 	PeersPort          = 15658
 )
 
-func RunNetworkManager(elevMgr *types.ElevatorManager, outgoingMsg chan types.Message, timerAction chan timer.TimerAction) {
-	elevator := elev.GetElevState(elevMgr)
+type ElevStateMgrWrapper struct {
+	*elev.ElevStateMgr
+}
+
+// Run starts the network subsystem and sends messages to the elevator subsystem in case of hall assignments.
+func Run(elevMgr *elev.ElevStateMgr, elevInMsgCh chan types.Message, elevOutMshCh chan types.Message) {
+	elevator := elevMgr.GetState()
 	nodeIDStr := fmt.Sprintf("node-%d", elevator.NodeID)
-	incomingMsg := make(chan types.Message)
+	netInMsgCh := make(chan types.Message)
+	netOutMsgCh := make(chan types.Message)
 	peerUpdateCh := make(chan types.PeerUpdate)
 
-	go bcast.Receiver(broadcastPort, incomingMsg)
-	go bcast.Transmitter(broadcastPort, outgoingMsg)
+	go bcast.Receiver(broadcastPort, netInMsgCh)
+	go bcast.Transmitter(broadcastPort, netOutMsgCh)
 	go peers.Transmitter(PeersPort, nodeIDStr, make(chan bool))
 	go peers.Receiver(PeersPort, peerUpdateCh)
 	go handlePeerUpdates(peerUpdateCh)
 	go peerManager()
 
-	for msg := range incomingMsg {
-		handleMessageEvent(elevMgr, msg, outgoingMsg, timerAction)
+	// Use wrapper to access methods
+	elevMgrWrapper := ElevStateMgrWrapper{elevMgr}
+
+	for {
+		select {
+			case elevInMsg := <- elevOutMshCh: // We received a hall order from the elevator subsystem. If there is one peer, send it back, else send to network subsystem.
+				elevMgrWrapper.handleMessageEvent(elevInMsg, elevInMsgCh, netOutMsgCh)
+			case netInMsg := <-netInMsgCh: // We received a message from the network subsystem. If its a hall assignment, send it to the elevator subsystem. If its a hall order, send it to the network subsystem.
+				elevMgrWrapper.handleMessageEvent(netInMsg, elevInMsgCh, netOutMsgCh)
+		}
 	}
-	select {}
 }
 
 // handleHallOrder appends event, calculates bid and broadcasts it
-func HandleHallOrder(elevMgr *types.ElevatorManager, hallEvent types.ButtonEvent, outMsgCh chan types.Message) {
+func (elevMgr *ElevStateMgrWrapper) handleHallOrder(hallEvent types.ButtonEvent, netOutMsgCh chan types.Message) {
 	slog.Debug("Received hall order in HandleHallOrder")
-	clearExistingCostCalculations(elevMgr, hallEvent)
+	elevMgr.clearExistingCostCalculations(hallEvent)
 	costCh := make(chan time.Duration, 1)
 	errCh := make(chan error, 1)
 
 	go func() {
-		bid := elev.TimeToServedOrder(elevMgr, hallEvent)
+		bid := elevMgr.TimeToServedOrder(hallEvent)
 		select {
 		case costCh <- bid:
 		default:
@@ -59,40 +71,47 @@ func HandleHallOrder(elevMgr *types.ElevatorManager, hallEvent types.ButtonEvent
 	select {
 	case bid := <-costCh:
 		msg := types.Message{
-			Type:     types.HallOrder,
+			Type:     types.NetHallOrder,
 			Cost:     bid,
 			Event:    hallEvent,
-			SenderID: elev.GetElevState(elevMgr).NodeID,
+			SenderID: elevMgr.GetState().NodeID,
 		}
 		numPeers := len(getCurrentPeers())
 		slog.Info("TimeToservedOrder", "bid", bid, "numPeers", numPeers)
-		appendEvent(elevMgr, hallEvent)
-		sendMultipleMessages(msg, outMsgCh)
+		elevMgr.appendEvent(hallEvent)
+		sendMultipleMessages(msg, netOutMsgCh)
 	case err := <-errCh:
 		slog.Error("Cost calculation failed", "error", err)
 	}
 }
 
 // handleMessageEvent handles messages from bcast.Receiver
-func handleMessageEvent(elevMgr *types.ElevatorManager, inMsg types.Message, outMsgCh chan types.Message, timerAction chan timer.TimerAction) {
+func (elevMgr *ElevStateMgrWrapper) handleMessageEvent(inMsg types.Message, elevInMsgCh chan types.Message, netOutMsgCh chan types.Message) {
 	numPeers := len(getCurrentPeers())
 	// If numPeers < 2, transform into single elevator system
 	if numPeers < 2 {
-		elev.MoveElevator(elevMgr, inMsg.Event, timerAction)
+		slog.Info("Single elevator system", "numPeers", numPeers)
+		msg := types.Message{
+			Type:     types.LocalHallAssignment,
+			Event:    inMsg.Event,
+		}
+		elevInMsgCh <- msg // Send hall assignment to elevator subsystem
 		return
 	}
 	switch inMsg.Type {
-	case types.HallOrder:
-		createBidMsg(elevMgr, inMsg, outMsgCh)
+	case types.LocalHallOrder:
+		elevMgr.handleHallOrder(inMsg.Event, netOutMsgCh)
+	case types.NetHallOrder:
+		elevMgr.createBidMsg(inMsg, netOutMsgCh)
 	case types.Bid:
-		handleBidMessage(elevMgr, inMsg, timerAction)
+		elevMgr.handleBidMessage(inMsg, elevInMsgCh)
 	}
 }
 
-func clearExistingCostCalculations(elevMgr *types.ElevatorManager, hallEvent types.ButtonEvent) {
-	for _, ebp := range elev.GetElevState(elevMgr).EventBids {
+func (elevMgr *ElevStateMgrWrapper) clearExistingCostCalculations(hallEvent types.ButtonEvent) {
+	for _, ebp := range elevMgr.GetState().EventBids {
 		if ebp.Event.Floor == hallEvent.Floor && ebp.Event.Button == hallEvent.Button {
-			elev.UpdateEventBids(elevMgr, func(bids *[]types.EventBidsPair) {
+			elevMgr.UpdateEventBids(func(bids *[]types.EventBidsPair) {
 				for i, b := range *bids {
 					if b.Event == ebp.Event {
 						*bids = append((*bids)[:i], (*bids)[i+1:]...)
@@ -105,15 +124,15 @@ func clearExistingCostCalculations(elevMgr *types.ElevatorManager, hallEvent typ
 	}
 }
 
-func sendMultipleMessages(msg types.Message, outMsgCh chan<- types.Message) {
+func sendMultipleMessages(msg types.Message, netOutMsgCh chan<- types.Message) {
 	for i := 0; i < messageRepetitions; i++ {
-		outMsgCh <- msg
+		netOutMsgCh <- msg
 		time.Sleep(messageInterval)
 	}
 }
 
-func handleBidMessage(elevMgr *types.ElevatorManager, inMsg types.Message, timerAction chan timer.TimerAction) {
-	elevator := elev.GetElevState(elevMgr)
+func (elevMgr *ElevStateMgrWrapper) handleBidMessage(inMsg types.Message, elevInMsgCh chan<- types.Message) {
+	elevator := elevMgr.GetState()
 
 	// Find matching event bid pair
 	var matchingPair *types.EventBidsPair
@@ -139,31 +158,35 @@ func handleBidMessage(elevMgr *types.ElevatorManager, inMsg types.Message, timer
 	}
 
 	// Append new bid
-	elev.UpdateEventBids(elevMgr, func(bids *[]types.EventBidsPair) {
+	elevMgr.UpdateEventBids(func(bids *[]types.EventBidsPair) {
 		(*bids)[pairIndex].Bids = append((*bids)[pairIndex].Bids, types.BidEntry{
 			NodeID: inMsg.SenderID,
 			Cost:   inMsg.Cost,
 		})
 	})
 
-	// Check if we have all bids
-	updatedElev := elev.GetElevState(elevMgr)
+	// Get state again to check if all bids are in
+	elevator = elevMgr.GetState()
 	numPeers := len(getCurrentPeers())
-	bidLength := len(updatedElev.EventBids[pairIndex].Bids)
+	bidLength := len(elevator.EventBids[pairIndex].Bids)
 
 	slog.Debug("Received bid", "numPeers", numPeers, "bidLength", bidLength)
 
 	if bidLength == numPeers {
-		// Find winner and handle result
-		assignment := findBestBid(updatedElev.EventBids[pairIndex], updatedElev.NodeID)
+		assignment := findBestBid(elevator.EventBids[pairIndex], elevator.NodeID)
 
 		if assignment.IsLocal {
 			slog.Info("This node won the bid", "event", assignment.Event, "cost", assignment.Cost)
-			elev.MoveElevator(elevMgr, assignment.Event, timerAction)
+			msg := types.Message{
+				Type:  types.LocalHallAssignment,
+				Event: assignment.Event,
+			}
+			elevInMsgCh <- msg // Send hall assignment to elevator subsystem
+			slog.Debug("Sent hall assignment to elevator subsystem")
 		}
 
 		// Clean up by removing the completed event
-		elev.UpdateEventBids(elevMgr, func(bids *[]types.EventBidsPair) {
+		elevMgr.UpdateEventBids(func(bids *[]types.EventBidsPair) {
 			*bids = append((*bids)[:pairIndex], (*bids)[pairIndex+1:]...)
 		})
 	}

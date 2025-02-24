@@ -4,8 +4,8 @@ package elevio
 
 import (
 	"fmt"
-	"main/src/config"
-	"main/src/types"
+	"multivator/src/config"
+	"multivator/src/types"
 	"net"
 	"sync"
 	"time"
