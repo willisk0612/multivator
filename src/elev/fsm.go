@@ -3,6 +3,7 @@ package elev
 
 import (
 	"log/slog"
+
 	"multivator/lib/driver-go/elevio"
 	"multivator/src/config"
 	"multivator/src/timer"
@@ -22,12 +23,8 @@ func (elevMgr *ElevStateMgr) HandleFloorArrival(floor int, timerAction chan time
 	if elevator.shouldStop() {
 		slog.Debug("Stopping at floor", "floor", floor)
 		elevio.SetMotorDirection(types.MD_Stop)
-		elevator.clearFloor()
+		elevMgr.clearFloor()
 		elevMgr.OpenDoor(timerAction)
-	} else {
-		slog.Debug("Continuing past floor",
-			"floor", floor,
-			"direction", elevator.Dir)
 	}
 }
 
@@ -64,6 +61,8 @@ func (elevMgr *ElevStateMgr) HandleStop() {
 	elevio.SetMotorDirection(types.MD_Stop)
 	elevio.SetDoorOpenLamp(false)
 
+	elevator := elevMgr.GetState()
+
 	// Reset elevator state
 	elevMgr.UpdateState(ElevDirField, types.MD_Stop)
 	elevMgr.UpdateState(ElevBehaviourField, types.Idle)
@@ -77,7 +76,23 @@ func (elevMgr *ElevStateMgr) HandleStop() {
 			elevMgr.UpdateOrders(func(orders *[config.NumFloors][config.NumButtons]bool) {
 				orders[f][b] = false
 			})
-			elevio.SetButtonLamp(b, f, false)
+
+			// Handle lights based on button type
+			if b == types.BT_Cab {
+				// Cab lights are handled locally
+				elevio.SetButtonLamp(b, f, false)
+			} else {
+				// Hall lights are handled by the light manager
+				elevMgr.lightMsgCh <- types.Message{
+					Type: types.LocalLightOff,
+					Event: types.ButtonEvent{
+						Floor:  f,
+						Button: b,
+					},
+					SenderID: elevator.NodeID,
+				}
+				slog.Debug("Turning off hall light in HandleStop", "floor", f, "button", b)
+			}
 		}
 	}
 }
@@ -101,7 +116,7 @@ func (elevMgr *ElevStateMgr) HandleDoorTimeout(timerAction chan<- timer.TimerAct
 		"floor", elevator.Floor)
 	elevio.SetDoorOpenLamp(false)
 	elevMgr.UpdateState(ElevBehaviourField, types.Idle)
-	elevator.clearFloor()
+	elevMgr.clearFloor()
 
 	pair := elevMgr.chooseDirInit()
 	elevMgr.UpdateState(ElevDirField, pair.Dir)
@@ -114,17 +129,45 @@ func (elevMgr *ElevStateMgr) HandleDoorTimeout(timerAction chan<- timer.TimerAct
 // Move elevator to floor, set order and lamp
 func (elevMgr *ElevStateMgr) MoveElevator(btn types.ButtonEvent, timerAction chan timer.TimerAction) {
 	elevator := elevMgr.GetState()
-	slog.Debug("Moving elevator to floor", "floor", btn.Floor)
+	slog.Debug("Moving elevator to floor", "floor", btn.Floor, "button", btn.Button)
+
+	// Update the current button event
+	elevMgr.UpdateState(ElevCurrentBtnEventField, btn)
+
 	if elevator.Floor == btn.Floor {
-		slog.Debug("Elevator already at floor")
+		slog.Debug("Elevator already at floor, opening door and clearing order",
+			"floor", btn.Floor, "button", btn.Button)
+
+		// Clear the order immediately since we're already here
+		elevMgr.clearFloor()
+
+		// Open the door
 		elevMgr.OpenDoor(timerAction)
 	} else {
-		slog.Debug("Setting order and moving elevator")
+		slog.Debug("Setting order and moving elevator",
+			"from", elevator.Floor, "to", btn.Floor, "button", btn.Button)
+
 		elevMgr.UpdateOrders(func(orders *[config.NumFloors][config.NumButtons]bool) {
 			orders[btn.Floor][btn.Button] = true
 		})
-		elevio.SetButtonLamp(btn.Button, btn.Floor, true)
-		elevMgr.UpdateState(ElevDirField, elevMgr.chooseDirInit().Dir)
+
+		if btn.Button == types.BT_Cab {
+			elevio.SetButtonLamp(btn.Button, btn.Floor, true)
+			slog.Debug("Turned on cab button lamp", "floor", btn.Floor)
+		} else {
+			// Send hall order light on message to network via lightMsgCh
+			slog.Debug("Sending hall light ON message", "floor", btn.Floor, "button", btn.Button)
+			elevMgr.lightMsgCh <- types.Message{
+				Type:     types.LocalLightOn,
+				Event:    btn,
+				SenderID: elevator.NodeID,
+			}
+		}
+
+		// Update direction and start moving
+		dirnBehaviourPair := elevMgr.chooseDirInit()
+		elevMgr.UpdateState(ElevDirField, dirnBehaviourPair.Dir)
+		slog.Debug("Setting direction", "dir", dirnBehaviourPair.Dir, "behaviour", dirnBehaviourPair.Behaviour)
 		elevMgr.moveMotor()
 	}
 }

@@ -2,6 +2,7 @@ package network
 
 import (
 	"log/slog"
+
 	"multivator/src/types"
 )
 
@@ -32,10 +33,12 @@ func handlePeerUpdates(peerUpdateCh <-chan types.PeerUpdate) {
 	for update := range peerUpdateCh {
 		peerUpdatesChan <- update.Peers
 		if update.New != "" {
-			slog.Info("New peer connected", "newPeer", update.New, "totalPeers", len(update.Peers))
+			slog.Info("New peer connected", "newPeer", update.New, "totalPeers", len(update.Peers), "allPeers", update.Peers)
 		}
 		if len(update.Lost) > 0 {
-			slog.Info("Peer(s) lost", "lostPeers", update.Lost, "totalPeers", len(update.Peers))
+			slog.Info("Peer(s) lost", "lostPeers", update.Lost, "totalPeers", len(update.Peers), "allPeers", update.Peers)
 		}
+		// Log the complete current peer list after any change
+		slog.Info("Current peer list updated", "count", len(update.Peers), "peers", update.Peers)
 	}
 }

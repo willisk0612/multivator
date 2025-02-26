@@ -2,6 +2,7 @@
 package elev
 
 import (
+	"log/slog"
 	"multivator/lib/driver-go/elevio"
 	"multivator/src/config"
 	"multivator/src/types"
@@ -27,18 +28,75 @@ func (elevator *ElevState) shouldStop() bool {
 	return false
 }
 
-// Clears cab order and current direction hall order and lamp.
-func (elevator *ElevState) clearFloor() {
-	elevator.clearOrderAndLamp(types.BT_Cab)
-	shouldClear := elevator.clearOrdersAtFloor()
-	for btn := range config.NumButtons {
-		if shouldClear[btn] {
-			elevator.clearOrderAndLamp(types.ButtonType(btn))
+// Clears cab order and current direction hall order and lamp. It modifies the actual elevator state via the manager.
+func (elevMgr *ElevStateMgr) clearFloor() {
+	elevator := elevMgr.GetState()
+
+	// If we have a valid current button event and its floor matches the current floor,
+	// clear that specific button first
+	if elevator.CurrentBtnEvent.Floor == elevator.Floor && elevator.CurrentBtnEvent.Floor >= 0 {
+		slog.Debug("Clearing specific button event",
+			"floor", elevator.Floor,
+			"button", elevator.CurrentBtnEvent.Button)
+
+		// Clear the specific order for the current button event
+		elevMgr.UpdateOrders(func(orders *[config.NumFloors][config.NumButtons]bool) {
+			orders[elevator.Floor][elevator.CurrentBtnEvent.Button] = false
+		})
+
+		// Handle light based on button type
+		if elevator.CurrentBtnEvent.Button == types.BT_Cab {
+			// Cab lights are handled locally
+			elevio.SetButtonLamp(elevator.CurrentBtnEvent.Button, elevator.Floor, false)
+		} else {
+			// Hall lights are handled by the light manager - broadcast the light off message
+			elevMgr.lightMsgCh <- types.Message{
+				Type:     types.LocalLightOff,
+				Event:    elevator.CurrentBtnEvent,
+				SenderID: elevator.NodeID,
+			}
+			slog.Debug("Sent light off message for specific hall button",
+				"floor", elevator.Floor,
+				"button", elevator.CurrentBtnEvent.Button)
 		}
 	}
+
+	// Default behavior for clearing multiple orders at current floor
+	shouldClear := elevator.ordersToClear()
+
+	elevMgr.UpdateOrders(func(orders *[config.NumFloors][config.NumButtons]bool) {
+		// Clear cab order
+		orders[elevator.Floor][types.BT_Cab] = false
+		elevio.SetButtonLamp(types.BT_Cab, elevator.Floor, false)
+
+		// Clear hall orders based on shouldClear
+		for b := types.ButtonType(0); b < config.NumButtons; b++ {
+			if shouldClear[b] && b != types.BT_Cab {
+				// Clear the order
+				orders[elevator.Floor][b] = false
+
+				// Only send network messages for hall button types
+				if b == types.BT_HallUp || b == types.BT_HallDown {
+					// Send light off message through the light manager
+					elevMgr.lightMsgCh <- types.Message{
+						Type: types.LocalLightOff,
+						Event: types.ButtonEvent{
+							Floor:  elevator.Floor,
+							Button: b,
+						},
+						SenderID: elevator.NodeID,
+					}
+					slog.Debug("Clearing hall order, sending light off broadcast",
+						"floor", elevator.Floor,
+						"button", b)
+				}
+			}
+		}
+	})
 }
 
-func (elevator *ElevState) clearOrdersAtFloor() [config.NumButtons]bool {
+// Helper function for clearFloor and TimeToServedOrder. It determines which orders to clear at the current floor.
+func (elevator *ElevState) ordersToClear() [config.NumButtons]bool {
 	shouldClear := [config.NumButtons]bool{}
 
 	// At edge floors, clear all orders
@@ -68,16 +126,21 @@ func (elevator *ElevState) clearOrdersAtFloor() [config.NumButtons]bool {
 	return shouldClear
 }
 
-func (elevator *ElevState) clearOrderAndLamp(btn types.ButtonType) {
-	elevator.Orders[elevator.Floor][btn] = false
-	elevio.SetButtonLamp(btn, elevator.Floor, false)
-}
-
 func (elevator *ElevState) countOrders(startFloor int, endFloor int) (result int) {
+	// Ensure floor range is valid
+	if startFloor < 0 {
+		startFloor = 0
+	}
+	if endFloor > config.NumFloors {
+		endFloor = config.NumFloors
+	}
+
+	// Count orders for each floor and button type
 	for floor := startFloor; floor < endFloor; floor++ {
-		for btn := range config.NumButtons {
+		for btn := types.ButtonType(0); btn < config.NumButtons; btn++ {
 			if elevator.Orders[floor][btn] {
 				result++
+				slog.Debug("Found order in count", "floor", floor, "button", btn)
 			}
 		}
 	}

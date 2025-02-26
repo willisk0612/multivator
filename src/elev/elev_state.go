@@ -1,14 +1,17 @@
 package elev
 
 import (
+	"reflect"
+
 	"multivator/src/config"
 	"multivator/src/types"
-	"reflect"
 )
 
 // StartStateMgr starts the elevator state manager goroutine that serializes access to the elevator state.
 func StartStateMgr(elevator *ElevState) *ElevStateMgr {
-	elevMgr := &ElevStateMgr{Cmds: make(chan ElevStateCmd)}
+	elevMgr := &ElevStateMgr{
+		Cmds: make(chan ElevStateCmd),
+	}
 	go func() {
 		for cmd := range elevMgr.Cmds {
 			cmd.Exec(elevator)
