@@ -3,9 +3,10 @@ package bcast
 import (
 	"encoding/json"
 	"fmt"
-	"multivator/lib/network-go/network/conn"
 	"net"
 	"reflect"
+
+	"multivator/lib/network-go/network/conn"
 )
 
 const bufSize = 1024

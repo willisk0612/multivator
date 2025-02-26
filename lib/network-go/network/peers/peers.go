@@ -2,18 +2,20 @@ package peers
 
 import (
 	"fmt"
-	"multivator/lib/network-go/network/conn"
-	"multivator/src/types"
 	"net"
 	"sort"
 	"time"
+
+	"multivator/lib/network-go/network/conn"
+	"multivator/src/types"
 )
 
-const interval = 15 * time.Millisecond
-const timeout = 500 * time.Millisecond
+const (
+	interval = 15 * time.Millisecond
+	timeout  = 500 * time.Millisecond
+)
 
 func Transmitter(port int, id string, transmitEnable <-chan bool) {
-
 	conn := conn.DialBroadcastUDP(port)
 	addr, _ := net.ResolveUDPAddr("udp4", fmt.Sprintf("255.255.255.255:%d", port))
 
@@ -32,7 +34,6 @@ func Transmitter(port int, id string, transmitEnable <-chan bool) {
 }
 
 func Receiver(port int, peerUpdateCh chan<- types.PeerUpdate) {
-
 	var buf [1024]byte
 	var p types.PeerUpdate
 	lastSeen := make(map[string]time.Time)
