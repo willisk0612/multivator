@@ -2,8 +2,9 @@ package timer
 
 import (
 	"log/slog"
-	"multivator/src/config"
 	"time"
+
+	"multivator/src/config"
 )
 
 type TimerAction int

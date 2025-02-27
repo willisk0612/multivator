@@ -1,6 +1,6 @@
 {
     "go.lintTool": "golangci-lint",
-    "go.formatTool": "goimports",
+    "go.formatTool": "gofumpt",
     "explorer.compactFolders": false,
     "scm.compactFolders": false,
     "code-runner.ignoreSelection": true,
@@ -10,7 +10,7 @@
             "name": "Run Go File"
         },
         {
-            "command": "goimports -w .",
+            "command": "gofumpt -l -w .",
             "name": "Format Go Files"
         },
         {
