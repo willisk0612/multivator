@@ -1,0 +1,279 @@
+time=18:22:07 level=INFO source=:0 msg="2025/02/27 18:22:07 INFO System initialized port=15657 nodeID=0xc00000a1c0"
+time=18:22:07 level=DEBUG source=elev.go:121 msg="Elevator initialized" nodeID=0
+time=18:22:07 level=INFO source=peer_manager.go:35 msg="New peer connected" newPeer=node-1 totalPeers=1
+time=18:22:07 level=INFO source=peer_manager.go:40 msg="Current peer list updated" count=1 peers=[node-1]
+time=18:22:07 level=INFO source=peer_manager.go:35 msg="New peer connected" newPeer=node-0 totalPeers=2
+time=18:22:07 level=INFO source=peer_manager.go:40 msg="Current peer list updated" count=2 peers="[node-0 node-1]"
+time=18:22:07 level=INFO source=elev.go:157 msg="Elevator already at floor" floor=3
+time=18:22:07 level=DEBUG source=fsm.go:24 msg="Stopping at floor" floor=3
+time=18:22:07 level=DEBUG source=fsm.go:183 msg="Starting door timer"
+time=18:22:10 level=DEBUG source=timer.go:29 msg="Timer timed out"
+time=18:22:10 level=DEBUG source=fsm.go:103 msg="Entered HandleDoorTimeout"
+time=18:22:10 level=DEBUG source=fsm.go:115 msg="Closing door and changing state" floor=3
+time=18:22:14 level=DEBUG source=fsm.go:132 msg="Moving elevator to floor" floor=0 button=2
+time=18:22:14 level=DEBUG source=fsm.go:147 msg="Setting order and moving elevator" from=3 to=0 button=2
+time=18:22:14 level=DEBUG source=fsm.go:156 msg="Turned on cab button lamp" floor=0
+time=18:22:14 level=DEBUG source=orders.go:145 msg="Found order in count" floor=0 button=2
+time=18:22:14 level=DEBUG source=fsm.go:170 msg="Setting direction" dir=-1 behaviour=1
+time=18:22:22 level=DEBUG source=fsm.go:24 msg="Stopping at floor" floor=0
+time=18:22:22 level=DEBUG source=orders.go:39 msg="Clearing specific button event" floor=0 button=2
+time=18:22:22 level=DEBUG source=fsm.go:183 msg="Starting door timer"
+time=18:22:25 level=DEBUG source=timer.go:29 msg="Timer timed out"
+time=18:22:25 level=DEBUG source=fsm.go:103 msg="Entered HandleDoorTimeout"
+time=18:22:25 level=DEBUG source=fsm.go:115 msg="Closing door and changing state" floor=0
+time=18:22:25 level=DEBUG source=orders.go:39 msg="Clearing specific button event" floor=0 button=2
+time=18:22:31 level=DEBUG source=elev.go:46 msg="Hall button press discovered in elevator. Sending to network"
+time=18:22:31 level=DEBUG source=elev.go:53 msg="Hall message sent to network" floor=0 button=0 nodeID=0
+time=18:22:31 level=DEBUG source=network.go:63 msg="Received message in network from elevator subsystem" type=0 event="{Floor:0 Button:0}"
+time=18:22:31 level=INFO source=network.go:137 msg="Processing local hall order from elevator" floor=0 button=0
+time=18:22:31 level=INFO source=network.go:233 msg="Processing hall order" floor=0 button=0
+time=18:22:31 level=INFO source=network.go:242 msg="Broadcasting hall order to network" floor=0 button=0 nodeID=0
+time=18:22:32 level=DEBUG source=network.go:132 msg="Finished processing message from elevator subsystem"
+time=18:22:32 level=DEBUG source=network.go:215 msg="Received network hall order" event="{Floor:0 Button:0}" from=0
+time=18:22:32 level=INFO source=bid_manager.go:24 msg="Broadcasting bid for hall order" floor=0 button=0 type=2
+time=18:22:32 level=DEBUG source=bid_manager.go:50 msg="Registering new event for bidding" event="{Floor:0 Button:0}"
+time=18:22:32 level=DEBUG source=bid_manager.go:73 msg="Adding our own bid directly" event="{Floor:0 Button:0}" nodeID=0 bid=0s
+time=18:22:32 level=INFO source=bid_manager.go:32 msg="Calculated bid for hall order" floor=0 button=0 bid=0s
+time=18:22:32 level=DEBUG source=bid_manager.go:43 msg="Broadcasting bid to network" event="{Floor:0 Button:0}" bid=0s nodeID=0
+time=18:22:32 level=DEBUG source=network.go:219 msg="Received bid" event="{Floor:0 Button:0}" from=1 cost=0s
+time=18:22:32 level=DEBUG source=bid_manager.go:227 msg="Adding new bid" nodeID=1 floor=0 button=0
+time=18:22:32 level=DEBUG source=bid_manager.go:264 msg="Checking bid counts" current=2 expected=2 peers=2
+time=18:22:32 level=DEBUG source=bid_manager.go:381 msg="Found best bid" event="{Floor:0 Button:0}" assignee=0 cost=0s
+time=18:22:32 level=DEBUG source=bid_manager.go:302 msg="All bids received, determining winner" event="{Floor:0 Button:0}" winner=0 localID=0 winningCost=0s
+time=18:22:32 level=DEBUG source=bid_manager.go:323 msg="No timeout to cancel for event" event="{Floor:0 Button:0}"
+time=18:22:32 level=INFO source=bid_manager.go:330 msg="WE WON THE BID - Assigning hall order locally" event="{Floor:0 Button:0}" cost=0s
+time=18:22:32 level=DEBUG source=bid_manager.go:341 msg="Sent hall assignment to elevator subsystem" event="{Floor:0 Button:0}"
+time=18:22:32 level=DEBUG source=bid_manager.go:414 msg="Clearing bids for processed event" event="{Floor:0 Button:0}"
+time=18:22:32 level=DEBUG source=bid_manager.go:272 msg="Processing winning bid and cancelling timeout" event="{Floor:0 Button:0}" bidCount=2 peers=2
+time=18:22:32 level=DEBUG source=bid_manager.go:414 msg="Clearing bids for processed event" event="{Floor:0 Button:0}"
+time=18:22:32 level=DEBUG source=elev.go:64 msg="Received message in elevator subsystem" type=1 event="{Floor:0 Button:0}"
+time=18:22:32 level=DEBUG source=bid_manager.go:422 msg="Event bids cleared" event="{Floor:0 Button:0}"
+time=18:22:32 level=INFO source=elev.go:66 msg="Elevator received hall assignment - moving elevator to floor" floor=0 button=0
+time=18:22:32 level=DEBUG source=fsm.go:132 msg="Moving elevator to floor" floor=0 button=0
+time=18:22:32 level=DEBUG source=fsm.go:138 msg="Elevator already at floor, opening door and clearing order" floor=0 button=0
+time=18:22:32 level=DEBUG source=orders.go:39 msg="Clearing specific button event" floor=0 button=0
+time=18:22:32 level=DEBUG source=network.go:219 msg="Received bid" event="{Floor:0 Button:0}" from=0 cost=0s
+time=18:22:32 level=DEBUG source=orders.go:59 msg="Sent light off message for specific hall button" floor=0 button=0
+time=18:22:32 level=DEBUG source=network.go:115 msg="Forwarding light message from elevator subsystem" type=5 event="{Floor:0 Button:0}"
+time=18:22:32 level=DEBUG source=bid_manager.go:139 msg="No event registered for this bid - registering" floor=0 button=0
+time=18:22:32 level=INFO source=light_manager.go:20 msg="Setting hall light OFF locally" floor=0 button=0
+time=18:22:32 level=DEBUG source=light_manager.go:56 msg="Hall light turned OFF locally" floor=0 button=0
+time=18:22:32 level=DEBUG source=light_manager.go:29 msg="Broadcasting light OFF message to other nodes" floor=0 button=0
+time=18:22:32 level=DEBUG source=bid_manager.go:227 msg="Adding new bid" nodeID=0 floor=0 button=0
+time=18:22:32 level=DEBUG source=bid_manager.go:264 msg="Checking bid counts" current=1 expected=2 peers=2
+time=18:22:32 level=DEBUG source=bid_manager.go:282 msg="Waiting for more bids" current=1 expected=2 event="{Floor:0 Button:0}"
+time=18:22:32 level=INFO source=light_manager.go:34 msg="Received broadcast light OFF message" floor=0 button=0
+time=18:22:32 level=DEBUG source=light_manager.go:63 msg="Hall light turned OFF (broadcast)" floor=0 button=0
+time=18:22:32 level=DEBUG source=fsm.go:183 msg="Starting door timer"
+time=18:22:32 level=DEBUG source=elev.go:46 msg="Hall button press discovered in elevator. Sending to network"
+time=18:22:32 level=DEBUG source=elev.go:53 msg="Hall message sent to network" floor=1 button=0 nodeID=0
+time=18:22:32 level=DEBUG source=network.go:63 msg="Received message in network from elevator subsystem" type=0 event="{Floor:1 Button:0}"
+time=18:22:32 level=INFO source=network.go:137 msg="Processing local hall order from elevator" floor=1 button=0
+time=18:22:32 level=INFO source=network.go:233 msg="Processing hall order" floor=1 button=0
+time=18:22:32 level=INFO source=network.go:242 msg="Broadcasting hall order to network" floor=1 button=0 nodeID=0
+time=18:22:32 level=DEBUG source=network.go:132 msg="Finished processing message from elevator subsystem"
+time=18:22:32 level=DEBUG source=network.go:215 msg="Received network hall order" event="{Floor:1 Button:0}" from=0
+time=18:22:32 level=INFO source=bid_manager.go:24 msg="Broadcasting bid for hall order" floor=1 button=0 type=2
+time=18:22:32 level=DEBUG source=bid_manager.go:50 msg="Registering new event for bidding" event="{Floor:1 Button:0}"
+time=18:22:32 level=DEBUG source=bid_manager.go:73 msg="Adding our own bid directly" event="{Floor:1 Button:0}" nodeID=0 bid=5s
+time=18:22:32 level=INFO source=bid_manager.go:32 msg="Calculated bid for hall order" floor=1 button=0 bid=5s
+time=18:22:32 level=DEBUG source=bid_manager.go:43 msg="Broadcasting bid to network" event="{Floor:1 Button:0}" bid=5s nodeID=0
+time=18:22:32 level=DEBUG source=network.go:219 msg="Received bid" event="{Floor:1 Button:0}" from=1 cost=2s
+time=18:22:32 level=DEBUG source=bid_manager.go:227 msg="Adding new bid" nodeID=1 floor=1 button=0
+time=18:22:32 level=DEBUG source=bid_manager.go:264 msg="Checking bid counts" current=2 expected=2 peers=2
+time=18:22:32 level=DEBUG source=bid_manager.go:381 msg="Found best bid" event="{Floor:1 Button:0}" assignee=1 cost=2s
+time=18:22:32 level=DEBUG source=bid_manager.go:302 msg="All bids received, determining winner" event="{Floor:1 Button:0}" winner=1 localID=0 winningCost=2s
+time=18:22:32 level=DEBUG source=bid_manager.go:323 msg="No timeout to cancel for event" event="{Floor:1 Button:0}"
+time=18:22:32 level=INFO source=bid_manager.go:344 msg="Another elevator won the bid" event="{Floor:1 Button:0}" winner=1
+time=18:22:32 level=DEBUG source=bid_manager.go:353 msg="Turning on light for hall order assigned to another elevator" event="{Floor:1 Button:0}" winner=1
+time=18:22:32 level=DEBUG source=bid_manager.go:414 msg="Clearing bids for processed event" event="{Floor:1 Button:0}"
+time=18:22:32 level=DEBUG source=bid_manager.go:272 msg="Processing winning bid and cancelling timeout" event="{Floor:1 Button:0}" bidCount=2 peers=2
+time=18:22:32 level=DEBUG source=bid_manager.go:414 msg="Clearing bids for processed event" event="{Floor:1 Button:0}"
+time=18:22:32 level=DEBUG source=light_manager.go:49 msg="Hall light turned ON" floor=1 button=0
+time=18:22:32 level=DEBUG source=bid_manager.go:422 msg="Event bids cleared" event="{Floor:1 Button:0}"
+time=18:22:32 level=DEBUG source=network.go:219 msg="Received bid" event="{Floor:1 Button:0}" from=0 cost=5s
+time=18:22:32 level=DEBUG source=bid_manager.go:139 msg="No event registered for this bid - registering" floor=1 button=0
+time=18:22:32 level=DEBUG source=bid_manager.go:227 msg="Adding new bid" nodeID=0 floor=1 button=0
+time=18:22:32 level=DEBUG source=bid_manager.go:264 msg="Checking bid counts" current=1 expected=2 peers=2
+time=18:22:32 level=DEBUG source=bid_manager.go:282 msg="Waiting for more bids" current=1 expected=2 event="{Floor:1 Button:0}"
+time=18:22:32 level=DEBUG source=elev.go:46 msg="Hall button press discovered in elevator. Sending to network"
+time=18:22:32 level=DEBUG source=elev.go:53 msg="Hall message sent to network" floor=2 button=0 nodeID=0
+time=18:22:32 level=DEBUG source=network.go:63 msg="Received message in network from elevator subsystem" type=0 event="{Floor:2 Button:0}"
+time=18:22:32 level=INFO source=network.go:137 msg="Processing local hall order from elevator" floor=2 button=0
+time=18:22:32 level=INFO source=network.go:233 msg="Processing hall order" floor=2 button=0
+time=18:22:32 level=INFO source=network.go:242 msg="Broadcasting hall order to network" floor=2 button=0 nodeID=0
+time=18:22:32 level=DEBUG source=network.go:132 msg="Finished processing message from elevator subsystem"
+time=18:22:32 level=DEBUG source=network.go:215 msg="Received network hall order" event="{Floor:2 Button:0}" from=0
+time=18:22:32 level=INFO source=bid_manager.go:24 msg="Broadcasting bid for hall order" floor=2 button=0 type=2
+time=18:22:32 level=DEBUG source=bid_manager.go:50 msg="Registering new event for bidding" event="{Floor:2 Button:0}"
+time=18:22:32 level=DEBUG source=bid_manager.go:73 msg="Adding our own bid directly" event="{Floor:2 Button:0}" nodeID=0 bid=7s
+time=18:22:32 level=INFO source=bid_manager.go:32 msg="Calculated bid for hall order" floor=2 button=0 bid=7s
+time=18:22:32 level=DEBUG source=bid_manager.go:43 msg="Broadcasting bid to network" event="{Floor:2 Button:0}" bid=7s nodeID=0
+time=18:22:32 level=DEBUG source=network.go:219 msg="Received bid" event="{Floor:2 Button:0}" from=1 cost=8s
+time=18:22:32 level=DEBUG source=bid_manager.go:227 msg="Adding new bid" nodeID=1 floor=2 button=0
+time=18:22:32 level=DEBUG source=bid_manager.go:264 msg="Checking bid counts" current=2 expected=2 peers=2
+time=18:22:32 level=DEBUG source=bid_manager.go:381 msg="Found best bid" event="{Floor:2 Button:0}" assignee=0 cost=7s
+time=18:22:32 level=DEBUG source=bid_manager.go:302 msg="All bids received, determining winner" event="{Floor:2 Button:0}" winner=0 localID=0 winningCost=7s
+time=18:22:32 level=DEBUG source=bid_manager.go:323 msg="No timeout to cancel for event" event="{Floor:2 Button:0}"
+time=18:22:32 level=INFO source=bid_manager.go:330 msg="WE WON THE BID - Assigning hall order locally" event="{Floor:2 Button:0}" cost=7s
+time=18:22:32 level=DEBUG source=bid_manager.go:341 msg="Sent hall assignment to elevator subsystem" event="{Floor:2 Button:0}"
+time=18:22:32 level=DEBUG source=elev.go:64 msg="Received message in elevator subsystem" type=1 event="{Floor:2 Button:0}"
+time=18:22:32 level=INFO source=elev.go:66 msg="Elevator received hall assignment - moving elevator to floor" floor=2 button=0
+time=18:22:32 level=DEBUG source=fsm.go:132 msg="Moving elevator to floor" floor=2 button=0
+time=18:22:32 level=DEBUG source=fsm.go:147 msg="Setting order and moving elevator" from=0 to=2 button=0
+time=18:22:32 level=DEBUG source=bid_manager.go:414 msg="Clearing bids for processed event" event="{Floor:2 Button:0}"
+time=18:22:32 level=DEBUG source=fsm.go:159 msg="Sending hall light ON message" floor=2 button=0
+time=18:22:32 level=DEBUG source=bid_manager.go:272 msg="Processing winning bid and cancelling timeout" event="{Floor:2 Button:0}" bidCount=2 peers=2
+time=18:22:32 level=DEBUG source=bid_manager.go:414 msg="Clearing bids for processed event" event="{Floor:2 Button:0}"
+time=18:22:32 level=DEBUG source=bid_manager.go:422 msg="Event bids cleared" event="{Floor:2 Button:0}"
+time=18:22:32 level=DEBUG source=network.go:115 msg="Forwarding light message from elevator subsystem" type=4 event="{Floor:2 Button:0}"
+time=18:22:32 level=DEBUG source=orders.go:145 msg="Found order in count" floor=2 button=0
+time=18:22:32 level=DEBUG source=fsm.go:170 msg="Setting direction" dir=0 behaviour=0
+time=18:22:32 level=DEBUG source=fsm.go:191 msg="Cannot move while door is open"
+time=18:22:32 level=DEBUG source=network.go:219 msg="Received bid" event="{Floor:2 Button:0}" from=0 cost=7s
+time=18:22:32 level=DEBUG source=bid_manager.go:139 msg="No event registered for this bid - registering" floor=2 button=0
+time=18:22:32 level=INFO source=light_manager.go:15 msg="Setting hall light ON" floor=2 button=0
+time=18:22:32 level=DEBUG source=light_manager.go:49 msg="Hall light turned ON" floor=2 button=0
+time=18:22:32 level=DEBUG source=bid_manager.go:227 msg="Adding new bid" nodeID=0 floor=2 button=0
+time=18:22:32 level=DEBUG source=bid_manager.go:264 msg="Checking bid counts" current=1 expected=2 peers=2
+time=18:22:32 level=DEBUG source=bid_manager.go:282 msg="Waiting for more bids" current=1 expected=2 event="{Floor:2 Button:0}"
+time=18:22:34 level=INFO source=bid_manager.go:183 msg="Bid collection timed out - making decision with available bids" event="{Floor:0 Button:0}"
+time=18:22:34 level=DEBUG source=bid_manager.go:381 msg="Found best bid" event="{Floor:0 Button:0}" assignee=0 cost=0s
+time=18:22:34 level=INFO source=bid_manager.go:439 msg="WE WON THE BID (on timeout) - Assigning hall order locally" event="{Floor:0 Button:0}" cost=0s
+time=18:22:34 level=DEBUG source=bid_manager.go:414 msg="Clearing bids for processed event" event="{Floor:0 Button:0}"
+time=18:22:34 level=DEBUG source=bid_manager.go:422 msg="Event bids cleared" event="{Floor:0 Button:0}"
+time=18:22:34 level=DEBUG source=elev.go:64 msg="Received message in elevator subsystem" type=1 event="{Floor:0 Button:0}"
+time=18:22:34 level=INFO source=elev.go:66 msg="Elevator received hall assignment - moving elevator to floor" floor=0 button=0
+time=18:22:34 level=DEBUG source=fsm.go:132 msg="Moving elevator to floor" floor=0 button=0
+time=18:22:34 level=DEBUG source=fsm.go:138 msg="Elevator already at floor, opening door and clearing order" floor=0 button=0
+time=18:22:34 level=DEBUG source=orders.go:39 msg="Clearing specific button event" floor=0 button=0
+time=18:22:34 level=DEBUG source=orders.go:59 msg="Sent light off message for specific hall button" floor=0 button=0
+time=18:22:34 level=DEBUG source=network.go:115 msg="Forwarding light message from elevator subsystem" type=5 event="{Floor:0 Button:0}"
+time=18:22:34 level=INFO source=light_manager.go:20 msg="Setting hall light OFF locally" floor=0 button=0
+time=18:22:34 level=DEBUG source=light_manager.go:56 msg="Hall light turned OFF locally" floor=0 button=0
+time=18:22:34 level=DEBUG source=light_manager.go:29 msg="Broadcasting light OFF message to other nodes" floor=0 button=0
+time=18:22:34 level=DEBUG source=fsm.go:183 msg="Starting door timer"
+time=18:22:34 level=INFO source=light_manager.go:34 msg="Received broadcast light OFF message" floor=0 button=0
+time=18:22:34 level=DEBUG source=light_manager.go:63 msg="Hall light turned OFF (broadcast)" floor=0 button=0
+time=18:22:34 level=INFO source=bid_manager.go:183 msg="Bid collection timed out - making decision with available bids" event="{Floor:1 Button:0}"
+time=18:22:34 level=DEBUG source=bid_manager.go:381 msg="Found best bid" event="{Floor:1 Button:0}" assignee=0 cost=5s
+time=18:22:34 level=INFO source=bid_manager.go:439 msg="WE WON THE BID (on timeout) - Assigning hall order locally" event="{Floor:1 Button:0}" cost=5s
+time=18:22:34 level=DEBUG source=bid_manager.go:414 msg="Clearing bids for processed event" event="{Floor:1 Button:0}"
+time=18:22:34 level=DEBUG source=bid_manager.go:422 msg="Event bids cleared" event="{Floor:1 Button:0}"
+time=18:22:34 level=DEBUG source=elev.go:64 msg="Received message in elevator subsystem" type=1 event="{Floor:1 Button:0}"
+time=18:22:34 level=INFO source=elev.go:66 msg="Elevator received hall assignment - moving elevator to floor" floor=1 button=0
+time=18:22:34 level=DEBUG source=fsm.go:132 msg="Moving elevator to floor" floor=1 button=0
+time=18:22:34 level=DEBUG source=fsm.go:147 msg="Setting order and moving elevator" from=0 to=1 button=0
+time=18:22:34 level=DEBUG source=fsm.go:159 msg="Sending hall light ON message" floor=1 button=0
+time=18:22:34 level=DEBUG source=orders.go:145 msg="Found order in count" floor=1 button=0
+time=18:22:34 level=DEBUG source=orders.go:145 msg="Found order in count" floor=2 button=0
+time=18:22:34 level=DEBUG source=network.go:115 msg="Forwarding light message from elevator subsystem" type=4 event="{Floor:1 Button:0}"
+time=18:22:34 level=INFO source=light_manager.go:15 msg="Setting hall light ON" floor=1 button=0
+time=18:22:34 level=DEBUG source=light_manager.go:49 msg="Hall light turned ON" floor=1 button=0
+time=18:22:34 level=DEBUG source=fsm.go:170 msg="Setting direction" dir=0 behaviour=0
+time=18:22:34 level=DEBUG source=fsm.go:191 msg="Cannot move while door is open"
+time=18:22:34 level=INFO source=bid_manager.go:183 msg="Bid collection timed out - making decision with available bids" event="{Floor:2 Button:0}"
+time=18:22:34 level=DEBUG source=bid_manager.go:381 msg="Found best bid" event="{Floor:2 Button:0}" assignee=0 cost=7s
+time=18:22:34 level=INFO source=bid_manager.go:439 msg="WE WON THE BID (on timeout) - Assigning hall order locally" event="{Floor:2 Button:0}" cost=7s
+time=18:22:34 level=DEBUG source=bid_manager.go:414 msg="Clearing bids for processed event" event="{Floor:2 Button:0}"
+time=18:22:34 level=DEBUG source=bid_manager.go:422 msg="Event bids cleared" event="{Floor:2 Button:0}"
+time=18:22:34 level=DEBUG source=elev.go:64 msg="Received message in elevator subsystem" type=1 event="{Floor:2 Button:0}"
+time=18:22:34 level=INFO source=elev.go:66 msg="Elevator received hall assignment - moving elevator to floor" floor=2 button=0
+time=18:22:34 level=DEBUG source=fsm.go:132 msg="Moving elevator to floor" floor=2 button=0
+time=18:22:34 level=DEBUG source=fsm.go:147 msg="Setting order and moving elevator" from=0 to=2 button=0
+time=18:22:34 level=DEBUG source=fsm.go:159 msg="Sending hall light ON message" floor=2 button=0
+time=18:22:34 level=DEBUG source=orders.go:145 msg="Found order in count" floor=1 button=0
+time=18:22:34 level=DEBUG source=orders.go:145 msg="Found order in count" floor=2 button=0
+time=18:22:34 level=DEBUG source=fsm.go:170 msg="Setting direction" dir=0 behaviour=0
+time=18:22:34 level=DEBUG source=fsm.go:191 msg="Cannot move while door is open"
+time=18:22:34 level=DEBUG source=network.go:115 msg="Forwarding light message from elevator subsystem" type=4 event="{Floor:2 Button:0}"
+time=18:22:34 level=INFO source=light_manager.go:15 msg="Setting hall light ON" floor=2 button=0
+time=18:22:34 level=DEBUG source=light_manager.go:49 msg="Hall light turned ON" floor=2 button=0
+time=18:22:34 level=INFO source=light_manager.go:34 msg="Received broadcast light OFF message" floor=1 button=0
+time=18:22:34 level=INFO source=light_manager.go:34 msg="Received broadcast light OFF message" floor=1 button=0
+time=18:22:34 level=DEBUG source=light_manager.go:63 msg="Hall light turned OFF (broadcast)" floor=1 button=0
+time=18:22:34 level=DEBUG source=light_manager.go:63 msg="Hall light turned OFF (broadcast)" floor=1 button=0
+time=18:22:34 level=INFO source=light_manager.go:34 msg="Received broadcast light OFF message" floor=1 button=1
+time=18:22:34 level=DEBUG source=light_manager.go:63 msg="Hall light turned OFF (broadcast)" floor=1 button=1
+time=18:22:37 level=DEBUG source=timer.go:29 msg="Timer timed out"
+time=18:22:37 level=DEBUG source=fsm.go:103 msg="Entered HandleDoorTimeout"
+time=18:22:37 level=DEBUG source=fsm.go:115 msg="Closing door and changing state" floor=0
+time=18:22:37 level=DEBUG source=orders.go:145 msg="Found order in count" floor=1 button=0
+time=18:22:37 level=DEBUG source=orders.go:145 msg="Found order in count" floor=2 button=0
+time=18:22:37 level=INFO source=light_manager.go:34 msg="Received broadcast light OFF message" floor=1 button=0
+time=18:22:37 level=DEBUG source=light_manager.go:63 msg="Hall light turned OFF (broadcast)" floor=1 button=0
+time=18:22:37 level=INFO source=light_manager.go:34 msg="Received broadcast light OFF message" floor=1 button=0
+time=18:22:37 level=DEBUG source=light_manager.go:63 msg="Hall light turned OFF (broadcast)" floor=1 button=0
+time=18:22:37 level=INFO source=light_manager.go:34 msg="Received broadcast light OFF message" floor=1 button=1
+time=18:22:37 level=DEBUG source=light_manager.go:63 msg="Hall light turned OFF (broadcast)" floor=1 button=1
+time=18:22:39 level=DEBUG source=fsm.go:24 msg="Stopping at floor" floor=1
+time=18:22:39 level=DEBUG source=orders.go:145 msg="Found order in count" floor=2 button=0
+time=18:22:39 level=DEBUG source=orders.go:90 msg="Clearing hall order, sending light off broadcast" floor=1 button=0
+time=18:22:39 level=DEBUG source=network.go:115 msg="Forwarding light message from elevator subsystem" type=5 event="{Floor:1 Button:0}"
+time=18:22:39 level=INFO source=light_manager.go:20 msg="Setting hall light OFF locally" floor=1 button=0
+time=18:22:39 level=DEBUG source=fsm.go:183 msg="Starting door timer"
+time=18:22:39 level=DEBUG source=light_manager.go:29 msg="Broadcasting light OFF message to other nodes" floor=1 button=0
+time=18:22:39 level=DEBUG source=light_manager.go:56 msg="Hall light turned OFF locally" floor=1 button=0
+time=18:22:39 level=INFO source=light_manager.go:34 msg="Received broadcast light OFF message" floor=1 button=0
+time=18:22:39 level=DEBUG source=light_manager.go:63 msg="Hall light turned OFF (broadcast)" floor=1 button=0
+time=18:22:42 level=DEBUG source=timer.go:29 msg="Timer timed out"
+time=18:22:42 level=DEBUG source=fsm.go:103 msg="Entered HandleDoorTimeout"
+time=18:22:42 level=DEBUG source=fsm.go:115 msg="Closing door and changing state" floor=1
+time=18:22:42 level=DEBUG source=orders.go:145 msg="Found order in count" floor=2 button=0
+time=18:22:42 level=DEBUG source=orders.go:90 msg="Clearing hall order, sending light off broadcast" floor=1 button=0
+time=18:22:42 level=DEBUG source=network.go:115 msg="Forwarding light message from elevator subsystem" type=5 event="{Floor:1 Button:0}"
+time=18:22:42 level=INFO source=light_manager.go:20 msg="Setting hall light OFF locally" floor=1 button=0
+time=18:22:42 level=DEBUG source=orders.go:145 msg="Found order in count" floor=2 button=0
+time=18:22:42 level=DEBUG source=light_manager.go:29 msg="Broadcasting light OFF message to other nodes" floor=1 button=0
+time=18:22:42 level=DEBUG source=light_manager.go:56 msg="Hall light turned OFF locally" floor=1 button=0
+time=18:22:42 level=INFO source=light_manager.go:34 msg="Received broadcast light OFF message" floor=1 button=0
+time=18:22:42 level=DEBUG source=light_manager.go:63 msg="Hall light turned OFF (broadcast)" floor=1 button=0
+time=18:22:45 level=DEBUG source=fsm.go:24 msg="Stopping at floor" floor=2
+time=18:22:45 level=DEBUG source=orders.go:39 msg="Clearing specific button event" floor=2 button=0
+time=18:22:45 level=DEBUG source=orders.go:59 msg="Sent light off message for specific hall button" floor=2 button=0
+time=18:22:45 level=DEBUG source=network.go:115 msg="Forwarding light message from elevator subsystem" type=5 event="{Floor:2 Button:0}"
+time=18:22:45 level=INFO source=light_manager.go:20 msg="Setting hall light OFF locally" floor=2 button=0
+time=18:22:45 level=DEBUG source=light_manager.go:56 msg="Hall light turned OFF locally" floor=2 button=0
+time=18:22:45 level=DEBUG source=orders.go:90 msg="Clearing hall order, sending light off broadcast" floor=2 button=0
+time=18:22:45 level=DEBUG source=orders.go:90 msg="Clearing hall order, sending light off broadcast" floor=2 button=1
+time=18:22:45 level=DEBUG source=light_manager.go:29 msg="Broadcasting light OFF message to other nodes" floor=2 button=0
+time=18:22:45 level=DEBUG source=network.go:115 msg="Forwarding light message from elevator subsystem" type=5 event="{Floor:2 Button:0}"
+time=18:22:45 level=INFO source=light_manager.go:20 msg="Setting hall light OFF locally" floor=2 button=0
+time=18:22:45 level=INFO source=light_manager.go:34 msg="Received broadcast light OFF message" floor=2 button=0
+time=18:22:45 level=DEBUG source=fsm.go:183 msg="Starting door timer"
+time=18:22:45 level=DEBUG source=light_manager.go:29 msg="Broadcasting light OFF message to other nodes" floor=2 button=0
+time=18:22:45 level=DEBUG source=light_manager.go:56 msg="Hall light turned OFF locally" floor=2 button=0
+time=18:22:45 level=DEBUG source=network.go:115 msg="Forwarding light message from elevator subsystem" type=5 event="{Floor:2 Button:1}"
+time=18:22:45 level=INFO source=light_manager.go:20 msg="Setting hall light OFF locally" floor=2 button=1
+time=18:22:45 level=DEBUG source=light_manager.go:63 msg="Hall light turned OFF (broadcast)" floor=2 button=0
+time=18:22:45 level=INFO source=light_manager.go:34 msg="Received broadcast light OFF message" floor=2 button=0
+time=18:22:45 level=DEBUG source=light_manager.go:56 msg="Hall light turned OFF locally" floor=2 button=1
+time=18:22:45 level=DEBUG source=light_manager.go:29 msg="Broadcasting light OFF message to other nodes" floor=2 button=1
+time=18:22:45 level=DEBUG source=light_manager.go:63 msg="Hall light turned OFF (broadcast)" floor=2 button=0
+time=18:22:45 level=INFO source=light_manager.go:34 msg="Received broadcast light OFF message" floor=2 button=1
+time=18:22:45 level=DEBUG source=light_manager.go:63 msg="Hall light turned OFF (broadcast)" floor=2 button=1
+time=18:22:48 level=DEBUG source=timer.go:29 msg="Timer timed out"
+time=18:22:48 level=DEBUG source=fsm.go:103 msg="Entered HandleDoorTimeout"
+time=18:22:48 level=DEBUG source=fsm.go:115 msg="Closing door and changing state" floor=2
+time=18:22:48 level=DEBUG source=orders.go:39 msg="Clearing specific button event" floor=2 button=0
+time=18:22:48 level=DEBUG source=orders.go:59 msg="Sent light off message for specific hall button" floor=2 button=0
+time=18:22:48 level=DEBUG source=network.go:115 msg="Forwarding light message from elevator subsystem" type=5 event="{Floor:2 Button:0}"
+time=18:22:48 level=DEBUG source=orders.go:90 msg="Clearing hall order, sending light off broadcast" floor=2 button=0
+time=18:22:48 level=INFO source=light_manager.go:20 msg="Setting hall light OFF locally" floor=2 button=0
+time=18:22:48 level=DEBUG source=orders.go:90 msg="Clearing hall order, sending light off broadcast" floor=2 button=1
+time=18:22:48 level=DEBUG source=light_manager.go:29 msg="Broadcasting light OFF message to other nodes" floor=2 button=0
+time=18:22:48 level=DEBUG source=network.go:115 msg="Forwarding light message from elevator subsystem" type=5 event="{Floor:2 Button:0}"
+time=18:22:48 level=INFO source=light_manager.go:20 msg="Setting hall light OFF locally" floor=2 button=0
+time=18:22:48 level=DEBUG source=light_manager.go:56 msg="Hall light turned OFF locally" floor=2 button=0
+time=18:22:48 level=INFO source=light_manager.go:34 msg="Received broadcast light OFF message" floor=2 button=0
+time=18:22:48 level=DEBUG source=light_manager.go:56 msg="Hall light turned OFF locally" floor=2 button=0
+time=18:22:48 level=DEBUG source=light_manager.go:29 msg="Broadcasting light OFF message to other nodes" floor=2 button=0
+time=18:22:48 level=DEBUG source=network.go:115 msg="Forwarding light message from elevator subsystem" type=5 event="{Floor:2 Button:1}"
+time=18:22:48 level=INFO source=light_manager.go:20 msg="Setting hall light OFF locally" floor=2 button=1
+time=18:22:48 level=DEBUG source=light_manager.go:56 msg="Hall light turned OFF locally" floor=2 button=1
+time=18:22:48 level=DEBUG source=light_manager.go:29 msg="Broadcasting light OFF message to other nodes" floor=2 button=1
+time=18:22:48 level=INFO source=light_manager.go:34 msg="Received broadcast light OFF message" floor=2 button=0
+time=18:22:48 level=DEBUG source=light_manager.go:63 msg="Hall light turned OFF (broadcast)" floor=2 button=0
+time=18:22:48 level=DEBUG source=light_manager.go:63 msg="Hall light turned OFF (broadcast)" floor=2 button=0
+time=18:22:48 level=INFO source=light_manager.go:34 msg="Received broadcast light OFF message" floor=2 button=1
+time=18:22:48 level=DEBUG source=light_manager.go:63 msg="Hall light turned OFF (broadcast)" floor=2 button=1

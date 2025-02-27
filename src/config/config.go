@@ -9,5 +9,5 @@ const (
 	DoorOpenDuration       = 3 * time.Second
 	TravelDuration         = 2 * time.Second
 	DirectionChangePenalty = 2 * time.Second
-	BidProcessingTimeout   = 500 * time.Millisecond
+	BidProcessingTimeout   = 2 * time.Second
 )

@@ -66,19 +66,3 @@ func lightManager(lmChans *LightManagerChannels) {
 		}
 	}
 }
-
-func (elevMgr *ElevStateMgrWrapper) clearCostCalc(hallEvent types.ButtonEvent) {
-	for _, ebp := range elevMgr.GetState().EventBids {
-		if ebp.Event.Floor == hallEvent.Floor && ebp.Event.Button == hallEvent.Button {
-			elevMgr.UpdateEventBids(func(bids *[]types.EventBidsPair) {
-				for i, b := range *bids {
-					if b.Event == ebp.Event {
-						*bids = append((*bids)[:i], (*bids)[i+1:]...)
-						break
-					}
-				}
-			})
-			break
-		}
-	}
-}
