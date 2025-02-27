@@ -2,6 +2,7 @@ package elev
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"strings"
@@ -33,7 +34,7 @@ func Run(elevMgr *ElevStateMgr, nodeID int, elevInMsgCh chan types.Message, elev
 	go elevio.PollStopButton(drv_stop)
 	go timer.Timer(doorTimerDuration, doorTimerTimeout, doorTimerAction)
 
-	InitLogger()
+	InitLogger(nodeID)
 	InitElevPos(nodeID)
 
 	for {
@@ -72,34 +73,32 @@ func Run(elevMgr *ElevStateMgr, nodeID int, elevInMsgCh chan types.Message, elev
 }
 
 // InitLogger sets up global logging configuration with compact time format
-func InitLogger() {
-	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
-		// Enable source code location
+func InitLogger(nodeID int) {
+	logFile, err := os.OpenFile(fmt.Sprintf("node%d.log", nodeID), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		panic(err)
+	}
+
+	multiWriter := io.MultiWriter(os.Stdout, logFile)
+
+	handler := slog.NewTextHandler(multiWriter, &slog.HandlerOptions{
+		Level:     slog.LevelDebug,
 		AddSource: true,
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			// Format timestamp
 			if a.Key == slog.TimeKey {
 				if t, ok := a.Value.Any().(time.Time); ok {
 					a.Value = slog.StringValue(t.Format("15:04:05"))
 				}
 			}
-
-			// Format source information as file:line
 			if a.Key == slog.SourceKey {
 				if source, ok := a.Value.Any().(*slog.Source); ok {
-					// Extract just filename (not full path)
 					file := source.File
 					if lastSlash := strings.LastIndexByte(file, '/'); lastSlash >= 0 {
 						file = file[lastSlash+1:]
 					}
-
-					// Format as file:line
-					sourceInfo := fmt.Sprintf("%s:%d", file, source.Line)
-					a.Value = slog.StringValue(sourceInfo)
+					a.Value = slog.StringValue(fmt.Sprintf("%s:%d", file, source.Line))
 				}
 			}
-
 			return a
 		},
 	})
@@ -126,18 +125,30 @@ func InitElevState(nodeID int) *ElevState {
 // InitElevPos initializes the elevator by moving it down to the first detected floor.
 func InitElevPos(nodeID int) {
 	elevator := InitElevState(nodeID)
-	// If floor sensor returns -1, keep moving down until we reach the first detected floor.
 	if elevio.GetFloor() == -1 {
 		elevio.SetMotorDirection(types.MD_Down)
-		slog.Debug("InitElevator: No floor detected, moving down to first floor sensor")
+		slog.Debug("InitElevator: Moving down to find a floor")
 		for {
 			floor := elevio.GetFloor()
 			if floor != -1 {
 				elevio.SetMotorDirection(types.MD_Stop)
-				elevator.Floor = floor
-				slog.Debug("InitElevator: Floor sensor triggered", "floor", floor)
+				elevio.SetFloorIndicator(floor)
+				elevMgr := StartStateMgr(elevator)
+				elevMgr.UpdateState(ElevFloorField, floor)
+
+				slog.Info("Elevator initialized at floor", "floor", floor)
 				break
 			}
 		}
+	} else {
+		// Already at a floor
+		floor := elevio.GetFloor()
+		elevio.SetFloorIndicator(floor)
+
+		// Update state directly
+		elevMgr := StartStateMgr(elevator)
+		elevMgr.UpdateState(ElevFloorField, floor)
+
+		slog.Info("Elevator already at floor", "floor", floor)
 	}
 }

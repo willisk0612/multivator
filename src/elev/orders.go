@@ -100,10 +100,11 @@ func (elevMgr *ElevStateMgr) clearFloor() {
 func (elevator *ElevState) ordersToClear() [config.NumButtons]bool {
 	shouldClear := [config.NumButtons]bool{}
 
-	// At edge floors, clear all orders
+	// At edge floors, only clear hall orders that actually exist
 	if elevator.Floor == 0 || elevator.Floor == config.NumFloors-1 {
-		shouldClear[types.BT_HallUp] = true
-		shouldClear[types.BT_HallDown] = true
+		// Only clear orders that actually exist
+		shouldClear[types.BT_HallUp] = elevator.Orders[elevator.Floor][types.BT_HallUp]
+		shouldClear[types.BT_HallDown] = elevator.Orders[elevator.Floor][types.BT_HallDown]
 		return shouldClear
 	}
 
