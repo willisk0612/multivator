@@ -13,7 +13,7 @@ import (
 // 	networkLightMsgCh = ch
 // }
 
-func (ew *ElevStateMgrWrapper) broadcastBid(inMsg types.Message, netOutMsgCh chan types.Message) {
+func (ew *ElevStateWrapper) broadcastBid(inMsg types.Message, netOutMsgCh chan types.Message) {
 	slog.Info("Broadcasting bid for hall order", "floor", inMsg.Event.Floor, "button", inMsg.Event.Button, "type", inMsg.Type)
 
 	// Register the event first if not already registered
@@ -67,7 +67,7 @@ func (ew *ElevStateMgrWrapper) broadcastBid(inMsg types.Message, netOutMsgCh cha
 	sendMultipleMessages(bidMsg, netOutMsgCh)
 }
 
-func (ew *ElevStateMgrWrapper) processBid(msg types.Message, elevInMsgCh chan types.Message, lmChans *LightManagerChannels) {
+func (ew *ElevStateWrapper) processBid(msg types.Message, elevInMsgCh chan types.Message) {
 	// Single elevator mode or zero peers - immediately assign the order locally
 	peers := getCurrentPeers()
 	if len(peers) == 0 {
@@ -164,7 +164,7 @@ func (ew *ElevStateMgrWrapper) processBid(msg types.Message, elevInMsgCh chan ty
 	slog.Debug("Checking bid counts", "current", bidLength, "expected", numPeers+1, "peers", peers)
 
 	// If we have just one elevator (ourselves) or all expected bids, process the winner
-	if numPeers == 0 || bidLength >= numPeers {
+	if bidLength == numPeers {
 		// Find the winning bid
 		assignment := findBestBid(elevator.EventBids[pairIndex], elevator.NodeID)
 
@@ -192,13 +192,7 @@ func (ew *ElevStateMgrWrapper) processBid(msg types.Message, elevInMsgCh chan ty
 				"event", msg.Event, "winner", assignment.Assignee)
 
 			// Turn on light for hall order that was assigned to another elevator
-			if lmChans != nil && msg.Event.Button != types.BT_Cab {
-				lightMsg := types.Message{
-					Event: msg.Event,
-				}
-				lmChans.lightOnChan <- lightMsg.Event
-				slog.Debug("Turning on light for hall order assigned to another elevator",
-					"event", msg.Event, "winner", assignment.Assignee)
+
 			}
 		}
 
@@ -237,9 +231,9 @@ func findBestBid(ebp types.EventBidsPair, localNodeID int) types.OrderAssignment
 }
 
 // appendEvent creates/modifies eventBids on a hall order
-func (elevMgr *ElevStateMgrWrapper) appendEvent(event types.ButtonEvent) {
-	if !elevMgr.eventAlreadyRegistered(event) {
-		elevMgr.UpdateEventBids(func(bids *[]types.EventBidsPair) {
+func (elevator *ElevStateWrapper) appendEvent(event types.ButtonEvent) {
+	if !elevator.eventAlreadyRegistered(event) {
+		elevator.UpdateEventBids(func(bids *[]types.EventBidsPair) {
 			*bids = append(*bids, types.EventBidsPair{
 				Event: event,
 				Bids:  []types.BidEntry{},
@@ -248,8 +242,8 @@ func (elevMgr *ElevStateMgrWrapper) appendEvent(event types.ButtonEvent) {
 	}
 }
 
-func (elevMgr *ElevStateMgrWrapper) eventAlreadyRegistered(event types.ButtonEvent) bool {
-	elevator := elevMgr.GetState()
+func (elevator *ElevStateWrapper) eventAlreadyRegistered(event types.ButtonEvent) bool {
+	elevator := elevator.GetState()
 	for _, ebp := range elevator.EventBids {
 		if ebp.Event == event {
 			return true
@@ -259,10 +253,10 @@ func (elevMgr *ElevStateMgrWrapper) eventAlreadyRegistered(event types.ButtonEve
 }
 
 // clearBidsForEvent removes a processed event from the event bids list
-func (elevMgr *ElevStateMgrWrapper) clearBidsForEvent(event types.ButtonEvent) {
+func (elevator *ElevStateWrapper) clearBidsForEvent(event types.ButtonEvent) {
 	slog.Debug("Clearing bids for processed event", "event", event)
 
-	elevMgr.UpdateEventBids(func(bids *[]types.EventBidsPair) {
+	elevator.UpdateEventBids(func(bids *[]types.EventBidsPair) {
 		for i, pair := range *bids {
 			if pair.Event.Floor == event.Floor && pair.Event.Button == event.Button {
 				// Remove this event by replacing it with the last one and shrinking the slice

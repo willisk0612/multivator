@@ -13,61 +13,24 @@ import (
 	"multivator/src/types"
 )
 
-// Run starts the elevator subsystem and listens for events from the network subsystem.
-func Run(elevMgr *ElevStateMgr, nodeID int, elevInMsgCh chan types.Message, elevOutMsgCh chan types.Message, lightElevMsgCh chan types.Message) {
-	// Store the light message channel in the elevator manager
-	elevMgr.SetLightMsgChannel(lightElevMsgCh)
+type ElevChannels struct {
+	Drv_buttons      chan types.ButtonEvent
+	Drv_floors       chan int
+	Drv_obstr        chan bool
+	Dv_stop          chan bool
+	DoorTimerAction  chan timer.TimerAction
+	DoorTimerTimeout chan bool
+	HallOrderMsg        chan types.Message
+}
 
-	drv_buttons := make(chan types.ButtonEvent)
-	drv_floors := make(chan int)
-	drv_obstr := make(chan bool)
-	drv_stop := make(chan bool)
-
-	doorTimerDuration := time.NewTimer(config.DoorOpenDuration)
-	doorTimerTimeout := make(chan bool, 1)
-	doorTimerAction := make(chan timer.TimerAction, 1)
-
-	go elevio.PollButtons(drv_buttons)
-	go elevio.PollFloorSensor(drv_floors)
-	go elevio.PollObstructionSwitch(drv_obstr)
-	go elevio.PollStopButton(drv_stop)
-	go timer.Timer(doorTimerDuration, doorTimerTimeout, doorTimerAction)
-
-	InitLogger()
-	InitElevPos(nodeID)
-
-	for {
-		select {
-		case btn := <-drv_buttons:
-			if btn.Button == types.BT_Cab || elevio.GetFloor() == -1 {
-				elevMgr.MoveElevator(btn, doorTimerAction)
-			} else {
-				slog.Debug("Hall button press discovered in elevator. Sending to network")
-				msg := types.Message{
-					Type:     types.LocalHallOrder,
-					Event:    btn,
-					SenderID: elevMgr.GetState().NodeID,
-				}
-				elevOutMsgCh <- msg // Send hall order to network
-				slog.Debug("Hall message sent to network", "floor", btn.Floor, "button", btn.Button, "nodeID", elevMgr.GetState().NodeID)
-			}
-		case floor := <-drv_floors:
-			elevMgr.HandleFloorArrival(floor, doorTimerAction)
-		case obstruction := <-drv_obstr:
-			elevMgr.HandleObstruction(obstruction, doorTimerAction)
-		case <-drv_stop:
-			elevMgr.HandleStop()
-		case <-doorTimerTimeout:
-			elevMgr.HandleDoorTimeout(doorTimerAction)
-		case msg := <-elevInMsgCh:
-			slog.Debug("Received message in elevator subsystem", "type", msg.Type, "event", msg.Event)
-			if msg.Type == types.LocalHallAssignment {
-				slog.Info("Elevator received hall assignment - moving elevator to floor",
-					"floor", msg.Event.Floor,
-					"button", msg.Event.Button)
-				elevMgr.MoveElevator(msg.Event, doorTimerAction)
-			}
-		}
+func InitChannels() ElevChannels {
+	return ElevChannels{
+		Drv_buttons:      make(chan types.ButtonEvent),
+		Drv_floors:       make(chan int),
+		Drv_obstr:        make(chan bool),
+		Dv_stop:          make(chan bool),
+		DoorTimerAction:  make(chan timer.TimerAction),
+		DoorTimerTimeout: make(chan bool),
 	}
 }
 
@@ -108,7 +71,7 @@ func InitLogger() {
 	slog.SetDefault(logger)
 }
 
-func InitElevState(nodeID int) *ElevState {
+func InitElevState(nodeID int) *types.ElevState {
 	elevator := &ElevState{
 		NodeID:    nodeID,
 		Dir:       types.MD_Stop,

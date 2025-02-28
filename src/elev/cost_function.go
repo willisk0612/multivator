@@ -4,11 +4,12 @@ package elev
 import (
 	"time"
 
+	"multivator/src/config"
 	"multivator/src/types"
 )
 
-func (elevMgr *ElevStateMgr) TimeToServedOrder(btnEvent types.ButtonEvent) time.Duration {
-	elevator := elevMgr.GetState()
+func (elevator *ElevState) TimeToServedOrder(btnEvent types.ButtonEvent) time.Duration {
+	elevator := elevator.GetState()
 
 	// Base cost: distance to target floor
 	distance := abs(elevator.Floor - btnEvent.Floor)
@@ -16,7 +17,7 @@ func (elevMgr *ElevStateMgr) TimeToServedOrder(btnEvent types.ButtonEvent) time.
 
 	// Add penalty for door being open
 	if elevator.Behaviour == types.DoorOpen {
-		cost += 3 * time.Second
+		cost += config.DoorOpenDuration * time.Second
 	}
 
 	// Add significant penalty for each existing order

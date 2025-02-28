@@ -1,5 +1,17 @@
 package types
 
+type ElevState struct {
+	NodeID          int
+	Floor           int
+	BetweenFloors   bool
+	Dir             MotorDirection
+	Orders          [][][]bool // Cab, HallUp, HallDown
+	Behaviour       ElevBehaviour
+	Obstructed      bool
+	EventBids       []EventBidsPair
+	CurrentBtnEvent ButtonEvent
+}
+
 type MotorDirection int
 
 const (
