@@ -4,8 +4,8 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log/slog"
 	"time"
+	"log/slog"
 
 	"multivator/lib/driver-go/elevio"
 	"multivator/lib/network-go/network/bcast"
@@ -17,83 +17,60 @@ import (
 	"multivator/src/types"
 )
 
-const (
-	broadcastPort = 15657
-	PeersPort     = 15658
-)
-
 func main() {
-
 	// Initialize elevator subsystem
-
 	nodeID := flag.Int("id", 0, "Node ID of the elevator")
 	flag.Parse()
 	port := 15657 + *nodeID
-	elevio.Init(fmt.Sprintf("localhost:%d", port), config.NumFloors)
 	elev.InitLogger()
-	elevChs := elev.InitChannels()
-	doorTimerDuration := time.NewTimer(config.DoorOpenDuration)
+	elevio.Init(fmt.Sprintf("localhost:%d", port), config.NumFloors)
+
+	drv_buttons, drv_floors, drv_obstr, drv_stop := elev.InitHW()
 	elevator := elev.InitElevState(*nodeID)
+	elev.InitElevPos(elevator)
 
-	go elevio.PollButtons(elevChs.Drv_buttons)
-	go elevio.PollFloorSensor(elevChs.Drv_floors)
-	go elevio.PollObstructionSwitch(elevChs.Drv_obstr)
-	go elevio.PollStopButton(elevChs.Dv_stop)
-	go timer.Timer(doorTimerDuration, elevChs.DoorTimerTimeout, elevChs.DoorTimerAction)
+	hallOrderCh := make(chan types.ButtonEvent)
 
-	elev.InitElevPos(*nodeID)
+	doorTimerDuration := time.NewTimer(config.DoorOpenDuration)
+	doorTimerTimeout := make(chan bool)
+	doorTimerAction := make(chan timer.TimerAction)
+	go timer.Timer(doorTimerDuration, doorTimerTimeout, doorTimerAction)
 
 	// Initialize network subsystem
+	bidTx, bidRx, hallOrderTx, hallOrderRx, hallArrivalTx, hallArrivalRx, peerUpdateCh := network.InitChannels[any]()
 
-	netChs := network.InitChannels()
-
-	go bcast.Transmitter(broadcastPort, netChs.BidTx, netChs.HallOrderTx, netChs.HallArrivalTx)
-	go bcast.Receiver(broadcastPort, netChs.BidRx, netChs.HallOrderRx, netChs.HallArrivalRx)
-	go peers.Transmitter(PeersPort, fmt.Sprintf("node-%d", elevator.NodeID), make(chan bool))
-	go peers.Receiver(PeersPort, netChs.PeerUpdateCh)
+	go bcast.Transmitter(config.BcastPort, bidTx, hallOrderTx, hallArrivalTx)
+	go bcast.Receiver(config.BcastPort, bidRx, hallOrderRx, hallArrivalRx)
+	go peers.Transmitter(config.PeersPort, fmt.Sprintf("node-%d", elevator.NodeID), make(chan bool))
+	go peers.Receiver(config.PeersPort, peerUpdateCh)
+	slog.Info("Network subsystem initialized")
 
 	for {
 		select {
+			
 		// Elevator subsystem
-
-		case btn := <-elevChs.Drv_buttons:
-			if btn.Button == types.BT_Cab || elevio.GetFloor() == -1 {
-				elev.MoveElevator(elevator, btn, elevChs.DoorTimerAction)
-			} else {
-				slog.Debug("Hall button press discovered in elevator. Sending to network")
-				msg := types.Message{
-					Type:     types.LocalHallOrder,
-					Event:    btn,
-					SenderID: elevator.NodeID,
-				}
-				sendMultipleMessages(msg, netChs.HallOrderTx)
-			}
-		case floor := <-elevChs.Drv_floors:
-			elev.HandleFloorArrival(elevator, floor, elevChs.DoorTimerAction)
-		case obstruction := <-elevChs.Drv_obstr:
-			elev.HandleObstruction(elevator, obstruction, elevChs.DoorTimerAction)
-		case <-elevChs.Dv_stop:
+		case btn := <-drv_buttons:
+			slog.Info("New event:","Btn:", btn)
+			elev.HandleButtonPress(elevator, btn, doorTimerAction, hallOrderCh, bidTx)
+			slog.Info("HandleButtonPress done")
+		case floor := <-drv_floors:
+			elev.HandleFloorArrival(elevator, floor, doorTimerAction)
+		case obstruction := <-drv_obstr:
+			elev.HandleObstruction(elevator, obstruction, doorTimerAction)
+		case <-drv_stop:
 			elev.HandleStop(elevator)
-		case <-elevChs.DoorTimerTimeout:
-			elev.HandleDoorTimeout(elevator, elevChs.DoorTimerAction)
+		case <-doorTimerTimeout:
+			elev.HandleDoorTimeout(elevator, doorTimerAction)
 
 		// Network subsystem
-		case bid := <-netChs.BidRx:
-			// Store bid and check if all bids are received. If so, assign order
-			// TODO: Broadcast hallOrderTx
-		case hallArrival := <-netChs.HallArrivalRx:
-			// Modify order matrix and turn off light
-
-		// TODO: Implement sync hall lights when 
-
-
+		case bid := <-bidRx:
+			network.HandleBid(elevator, bid)
+		case hallArrival := <-hallArrivalRx:
+			network.HandleHallArrival(elevator, hallArrival)
+		case peerUpdate := <-peerUpdateCh:
+			network.HandlePeerUpdates(peerUpdate)
+		case hallOrder := <-hallOrderCh:
+			network.HandleHallOrder(elevator, hallOrder, bidTx)
 		}
-	}
-}
-
-func sendMultipleMessages(msg types.Message, out chan<- types.Message) {
-	for i := 0; i < config.MsgRepetitions; i++ {
-		out <- msg
-		time.Sleep(config.MsgInterval)
 	}
 }

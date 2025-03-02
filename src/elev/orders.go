@@ -1,9 +1,9 @@
 package elev
 
 import (
-	"main/lib/driver-go/elevio"
-	"main/src/config"
-	"main/src/types"
+	"multivator/lib/driver-go/elevio"
+	"multivator/src/config"
+	"multivator/src/types"
 )
 
 // Clears cab order and current direction hall order and lamp.
@@ -48,14 +48,31 @@ func ordersToClear(elevator *types.ElevState) [config.NumButtons]bool {
 }
 
 func clearOrderAndLamp(elevator *types.ElevState, btn types.ButtonType) {
-	elevator.Orders[elevator.Floor][btn] = false
+	elevator.Orders[elevator.NodeID][elevator.Floor][btn] = false
 	elevio.SetButtonLamp(btn, elevator.Floor, false)
+}
+
+func shouldStop(elevator *types.ElevState) bool {
+	currentorders := elevator.Orders[elevator.NodeID][elevator.Floor]
+
+	if currentorders[types.BT_Cab] ||
+		currentorders[types.BT_HallUp] ||
+		currentorders[types.BT_HallDown] {
+		return true
+	}
+
+	// Always stop at edge floors
+	if elevator.Floor == 0 || elevator.Floor == config.NumFloors-1 {
+		return true
+	}
+
+	return false
 }
 
 func countOrders(elevator *types.ElevState, startFloor int, endFloor int) (result int) {
 	for floor := startFloor; floor < endFloor; floor++ {
 		for btn := range config.NumButtons {
-			if elevator.Orders[floor][btn] {
+			if elevator.Orders[elevator.NodeID][floor][btn] {
 				result++
 			}
 		}

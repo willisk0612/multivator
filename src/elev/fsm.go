@@ -11,11 +11,11 @@ import (
 )
 
 // Handles button presses. In case of cab button, move elevator to floor and open door. In case of hall button, send hall call to network module.
-func HandleButtonPress(elevator *types.ElevState, btn types.ButtonEvent, timerAction chan timer.TimerAction, hallEventCh chan<- types.ButtonEvent, outMsgCh chan<- types.Message) {
+func HandleButtonPress(elevator *types.ElevState, btn types.ButtonEvent, timerAction chan timer.TimerAction, hallOrderCh chan<- types.ButtonEvent, outMsgCh chan<- types.Message[types.Bid]) {
 	if btn.Button == types.BT_Cab || elevio.GetFloor() == -1 {
 		MoveElevator(elevator, btn, timerAction)
-	} else if hallEventCh != nil {
-		hallEventCh <- btn
+	} else if hallOrderCh != nil {
+		hallOrderCh <- btn
 	}
 }
 
@@ -61,7 +61,7 @@ func HandleObstruction(elevator *types.ElevState, obstruction bool, timerAction 
 			timerAction <- timer.Start
 			slog.Debug("Obstruction cleared, restarting door timer")
 		} else {
-			pair := chooseDirInit(elevator)
+			pair := chooseDirIdle(elevator)
 			elevator.Dir = pair.Dir
 
 			if pair.Behaviour == types.Moving {
@@ -77,7 +77,7 @@ func HandleStop(elevator *types.ElevState) {
 	elevio.SetDoorOpenLamp(false)
 	for f := range config.NumFloors {
 		for b := types.ButtonType(0); b < config.NumButtons; b++ {
-			elevator.Orders[f][b] = false
+			elevator.Orders[elevator.NodeID][f][b] = false
 			elevio.SetButtonLamp(b, f, false)
 		}
 	}
@@ -106,7 +106,7 @@ func HandleDoorTimeout(elevator *types.ElevState, timerAction chan<- timer.Timer
 	elevator.Behaviour = types.Idle
 	clearFloor(elevator)
 
-	pair := chooseDirInit(elevator)
+	pair := chooseDirIdle(elevator)
 	elevator.Dir = pair.Dir
 
 	if pair.Behaviour == types.Moving {
@@ -122,9 +122,9 @@ func MoveElevator(elevator *types.ElevState, btn types.ButtonEvent, timerAction 
 		OpenDoor(elevator, timerAction)
 	} else {
 		slog.Debug("Setting order and moving elevator")
-		elevator.Orders[btn.Floor][btn.Button] = true
+		elevator.Orders[elevator.NodeID][btn.Floor][btn.Button] = true
 		elevio.SetButtonLamp(btn.Button, btn.Floor, true)
-		elevator.Dir = chooseDirInit(elevator).Dir
+		elevator.Dir = chooseDirIdle(elevator).Dir
 		moveMotor(elevator)
 	}
 }
@@ -152,7 +152,7 @@ func moveMotor(elevator *types.ElevState) {
 }
 
 // Algorithm that only goes as far as the final order in that direction, then reverses.
-func chooseDirInit(elevator *types.ElevState) types.DirnBehaviourPair {
+func chooseDirIdle(elevator *types.ElevState) types.DirnBehaviourPair {
 	var pair types.DirnBehaviourPair
 
 	if elevator.Dir == types.MD_Stop {
@@ -165,7 +165,7 @@ func chooseDirInit(elevator *types.ElevState) types.DirnBehaviourPair {
 			pair = types.DirnBehaviourPair{Dir: types.MD_Stop, Behaviour: types.Idle}
 		}
 	} else {
-		pair = chooseDirWhileMoving(elevator, elevator.Dir)
+		pair = chooseDirMoving(elevator, elevator.Dir)
 	}
 
 	if pair.Behaviour == types.Moving {
@@ -177,7 +177,7 @@ func chooseDirInit(elevator *types.ElevState) types.DirnBehaviourPair {
 	return pair
 }
 
-func chooseDirWhileMoving(elevator *types.ElevState, dir types.MotorDirection) types.DirnBehaviourPair {
+func chooseDirMoving(elevator *types.ElevState, dir types.MotorDirection) types.DirnBehaviourPair {
 	switch dir {
 	case types.MD_Up:
 		if ordersAbove(elevator) > 0 {

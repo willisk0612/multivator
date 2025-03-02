@@ -1,137 +1,147 @@
 package network
 
 import (
-	"log/slog"
-	"time"
-
+	"multivator/lib/driver-go/elevio"
 	"multivator/src/config"
 	"multivator/src/elev"
 	"multivator/src/types"
+	"time"
 )
 
-const (
-	peerUpdateTimeout  = 100 * time.Millisecond
-	broadcastPort      = 15657
-	PeersPort          = 15658
-)
-
-type ElevStateWrapper struct {
-	*elev.ElevState
+func InitChannels[T any]() (
+	bidTx chan types.Message[types.Bid],
+	bidRx chan types.Message[types.Bid],
+	hallOrderTx chan types.Message[types.HallOrder],
+	hallOrderRx chan types.Message[types.HallOrder],
+	hallArrivalTx chan types.Message[types.HallArrival],
+	hallArrivalRx chan types.Message[types.HallArrival],
+	peerUpdateCh chan types.PeerUpdate,
+) {
+	bidTx = make(chan types.Message[types.Bid])
+	bidRx = make(chan types.Message[types.Bid])
+	hallOrderTx = make(chan types.Message[types.HallOrder])
+	hallOrderRx = make(chan types.Message[types.HallOrder])
+	hallArrivalTx = make(chan types.Message[types.HallArrival])
+	hallArrivalRx = make(chan types.Message[types.HallArrival])
+	peerUpdateCh = make(chan types.PeerUpdate)
+	return bidTx, bidRx, hallOrderTx, hallOrderRx, hallArrivalTx, hallArrivalRx, peerUpdateCh
 }
 
-type NetChannels struct {
-	BidTx         chan types.Message
-	BidRx         chan types.Message
-	HallArrivalTx chan types.Message
-	HallArrivalRx chan types.Message
-	PeerUpdateCh  chan types.PeerUpdate
-}
-
-func InitChannels() NetChannels {
-	return NetChannels{
-
-		BidTx:         make(chan types.Message),
-		BidRx:         make(chan types.Message),
-		HallArrivalTx: make(chan types.Message),
-		HallArrivalRx: make(chan types.Message),
-		PeerUpdateCh:  make(chan types.PeerUpdate),
-	}
-}
-
-func (elevator *ElevStateWrapper) handleMessageEvent(inMsg types.Message, elevInMsgCh, netOutMsgCh chan types.Message, lmChans *LightManagerChannels) {
-	// Skip messages from self with exceptions for critical message types
-	if inMsg.SenderID == elevator.GetState().NodeID &&
-		inMsg.Type != types.LocalHallOrder &&
-		inMsg.Type != types.NetHallOrder {
-		slog.Debug("Skipping message from self", "type", inMsg.Type, "event", inMsg.Event, "senderID", inMsg.SenderID)
+// HandleBid processes incoming bids from other elevators
+func HandleBid(elevator *types.ElevState, msg types.Message[types.Bid]) {
+	// Ignore own bids
+	if msg.SenderID == elevator.NodeID {
 		return
 	}
 
-	// Single elevator system: convert message to local assignment
-	if len(getCurrentPeers()) < 2 {
-		slog.Debug("Single elevator mode - converting to local assignment", "event", inMsg.Event)
+	// Check if this bid is already stored
+	for _, bid := range elevator.Bids {
+		if bid.NodeID == msg.SenderID &&
+			bid.Order.Floor == msg.Content.Order.Floor &&
+			bid.Order.Button == msg.Content.Order.Button {
+			return
+		}
+	}
+	cost := elev.Cost(elevator, msg.Content.Order)
 
-		// For hall orders and other relevant message types
-		if inMsg.Type == types.LocalHallOrder || inMsg.Type == types.NetHallOrder {
-			// Create a new local assignment message
-			assignMsg := types.Message{
-				Type:     types.LocalHallAssignment,
-				Event:    inMsg.Event,
-				SenderID: elevator.GetState().NodeID,
-			}
-			slog.Debug("Single elevator: Converting hall order to local assignment",
-				"floor", inMsg.Event.Floor,
-				"button", inMsg.Event.Button)
-			elevInMsgCh <- assignMsg
+	newBid := types.Bid{
+		NodeID: msg.SenderID,
+		Order:  msg.Content.Order,
+		// Append the cost to the bid
+		Cost: []time.Duration{cost},
+	}
 
-			// Also turn on the light
-			if inMsg.Event.Button != types.BT_Cab {
-				lmChans.lightOnChan <- inMsg.Event
+	// Store the bid
+	elevator.Bids = append(elevator.Bids, newBid)
+
+	// Check if we have received bids from all peers
+
+	// We need bids from all peers plus ourselves for this specific order
+	bidCount := 0
+	for _, bid := range elevator.Bids {
+		if bid.Order.Floor == msg.Content.Order.Floor && bid.Order.Button == msg.Content.Order.Button {
+			bidCount++
+		}
+	}
+	peers := getPeers()
+
+	// If we have all bids, determine the winner
+	if bidCount == len(peers)+1 {
+		assignee := findBestBid(elevator, msg.Content.Order)
+		elevator.Orders[assignee][msg.Content.Order.Floor][msg.Content.Order.Button] = true
+		elevio.SetButtonLamp(msg.Content.Order.Button, msg.Content.Order.Floor, true)
+		clearBidsForOrder(elevator, msg.Content.Order)
+	}
+}
+
+func HandleHallOrder(elevator *types.ElevState, event types.ButtonEvent, bidTx chan types.Message[types.Bid]) {
+	msg := types.Message[types.Bid]{
+		Type:      types.BidMsg,
+		Content:   types.Bid{Order: event},
+		SenderID:  elevator.NodeID,
+		LoopCount: 0,
+	}
+
+	cost := elev.Cost(elevator, event)
+	// Append cost to []time.Duration in Bid struct in []types.Bid in ElevState
+	elevator.Bids = append(elevator.Bids,
+		types.Bid{
+			NodeID: elevator.NodeID,
+			Order:  event,
+			Cost:   []time.Duration{cost},
+		},
+	)
+	SendMsgs(msg, bidTx)
+}
+
+// determineWinner returns the NodeID of the elevator with the lowest bid
+func findBestBid(elevator *types.ElevState, event types.ButtonEvent) int {
+	var lowestCost time.Duration = time.Hour * 24 // Start with a very high cost
+	bestNode := -1
+
+	for _, bid := range elevator.Bids {
+		if bid.Order.Floor == event.Floor && bid.Order.Button == event.Button {
+			if len(bid.Cost) > 0 && bid.Cost[0] < lowestCost {
+				lowestCost = bid.Cost[0]
+				bestNode = bid.NodeID
 			}
 		}
+	}
+	return bestNode
+}
+func clearBidsForOrder(elevator *types.ElevState, event types.ButtonEvent) {
+	newBids := make([]types.Bid, 0)
+
+	for _, bid := range elevator.Bids {
+		if bid.Order.Floor != event.Floor || bid.Order.Button != event.Button {
+			newBids = append(newBids, bid)
+		}
+	}
+
+	elevator.Bids = newBids
+}
+
+// HandleHallArrival processes notifications that an elevator has arrived at a hall call
+func HandleHallArrival(elevator *types.ElevState, msg types.Message[types.HallArrival]) {
+	// Ignore own hall arrivals
+	if msg.SenderID == elevator.NodeID {
 		return
 	}
 
-	switch inMsg.Type {
-	case types.LocalHallOrder:
-		// For LocalHallOrder, set the SenderID before processing
-		if inMsg.SenderID == 0 { // If SenderID not set yet
-			inMsg.SenderID = elevator.GetState().NodeID
-			slog.Debug("Set SenderID for local hall order", "nodeID", inMsg.SenderID)
-		}
-		slog.Debug("Processing local hall order", "event", inMsg.Event)
-		elevator.processHallOrder(inMsg.Event, netOutMsgCh)
-	case types.NetHallOrder:
-		slog.Debug("Received network hall order", "event", inMsg.Event, "from", inMsg.SenderID)
-		elevator.broadcastBid(inMsg, netOutMsgCh)
-	case types.Bid:
-		slog.Debug("Received bid", "event", inMsg.Event, "from", inMsg.SenderID, "cost", inMsg.Cost)
-		elevator.processBid(inMsg, elevInMsgCh, lmChans)
+	// Update the order matrix to mark this order as completed
+	if msg.SenderID < len(elevator.Orders) &&
+		msg.Content.Order.Floor < len(elevator.Orders[msg.SenderID]) {
+		elevator.Orders[msg.SenderID][msg.Content.Order.Floor][msg.Content.Order.Button] = false
 	}
+
+	// Turn off the light for this order
+	elevio.SetButtonLamp(msg.Content.Order.Button, msg.Content.Order.Floor, false)
 }
 
-func (elevator *ElevStateWrapper) ProcessHallOrder(event types.ButtonEvent, netOutMsgCh chan types.Message) {
-	slog.Info("Processing hall order", "floor", event.Floor, "button", event.Button)
-
-	// Clear any existing bids for this event
-	elevator.clearCostCalc(event)
-
-	// Only broadcast the hall order - do NOT calculate bid here or register event
-	// (This will happen when we receive the NetHallOrder)
-	msg := types.Message{
-		Type:     types.NetHallOrder,
-		Event:    event,
-		SenderID: elevator.NodeID,
-	}
-
-	slog.Info("Broadcasting hall order to network", "floor", event.Floor, "button", event.Button, "nodeID", elevator.NodeID)
-
-	// Send multiple times for reliability (using the configured repetition count)
-	for i := 0; i < config.MsgRepetitions; i++ {
-		netOutMsgCh <- msg
-		time.Sleep(config.MsgInterval)
-	}
-}
-
-func (elevator *ElevStateWrapper) clearCostCalc(hallEvent types.ButtonEvent) {
-	for _, ebp := range elevator.EventBids {
-		if ebp.Event.Floor == hallEvent.Floor && ebp.Event.Button == hallEvent.Button {
-			elevator.UpdateEventBids(func(bids *[]types.EventBidsPair) {
-				for i, b := range *bids {
-					if b.Event == ebp.Event {
-						*bids = append((*bids)[:i], (*bids)[i+1:]...)
-						break
-					}
-				}
-			})
-			break
-		}
-	}
-}
-
-func sendMultipleMessages(msg types.Message, out chan<- types.Message) {
-	for i := 0; i < config.MsgRepetitions; i++ {
-		out <- msg
+func SendMsgs[T types.MsgContent](msg types.Message[T], tx chan types.Message[T]) {
+	// Loop through config.MsgRepetitions and send the message and sleep for config.MsgInterval
+	for index := 0; index < config.MsgRepetitions; index++ {
+		tx <- msg
 		time.Sleep(config.MsgInterval)
 	}
 }

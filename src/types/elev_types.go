@@ -5,10 +5,10 @@ type ElevState struct {
 	Floor           int
 	BetweenFloors   bool
 	Dir             MotorDirection
-	Orders          [][][]bool // Cab, HallUp, HallDown
+	Orders          [][][]bool // nodeid, floor, button. True if order is active
 	Behaviour       ElevBehaviour
 	Obstructed      bool
-	EventBids       []EventBidsPair
+	Bids            []Bid // Contains all bids for all orders
 	CurrentBtnEvent ButtonEvent
 }
 

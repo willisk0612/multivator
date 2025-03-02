@@ -11,4 +11,6 @@ const (
 	DirChangePenalty = 2 * time.Second
 	MsgRepetitions   = 1
 	MsgInterval      = 10 * time.Millisecond
+	BcastPort        = 15657
+	PeersPort        = 15658
 )

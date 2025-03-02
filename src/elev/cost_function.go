@@ -3,28 +3,33 @@ package elev
 
 import (
 	"time"
-
 	"multivator/src/config"
 	"multivator/src/types"
+	"github.com/tiendc/go-deepcopy"
 )
 
-func (elevator *ElevState) TimeToServedOrder(btnEvent types.ButtonEvent) time.Duration {
-	elevator := elevator.GetState()
+func Cost(elevator *types.ElevState, btnEvent types.ButtonEvent) time.Duration {
+	var simElev types.ElevState
+	if err := deepcopy.Copy(simElev, elevator); err != nil {
+		panic(err)
+	}
+
+	simElev.Orders[elevator.NodeID][btnEvent.Floor][btnEvent.Button] = true
 
 	// Base cost: distance to target floor
 	distance := abs(elevator.Floor - btnEvent.Floor)
 	cost := time.Duration(distance) * 2 * time.Second
 
 	// Add penalty for door being open
-	if elevator.Behaviour == types.DoorOpen {
+	if simElev.Behaviour == types.DoorOpen {
 		cost += config.DoorOpenDuration * time.Second
 	}
 
 	// Add significant penalty for each existing order
 	orderCount := 0
-	for f := range elevator.Orders {
-		for b := range elevator.Orders[f] {
-			if elevator.Orders[f][b] {
+	for f := range simElev.Orders {
+		for b := range simElev.Orders[f] {
+			if elevator.Orders[elevator.NodeID][f][b] {
 				orderCount++
 			}
 		}
@@ -41,6 +46,7 @@ func (elevator *ElevState) TimeToServedOrder(btnEvent types.ButtonEvent) time.Du
 
 	return cost
 }
+
 
 func getDirection(from, to int) types.MotorDirection {
 	if from < to {
