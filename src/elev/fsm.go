@@ -11,7 +11,7 @@ import (
 )
 
 // Handles button presses. In case of cab button, move elevator to floor and open door. In case of hall button, send hall call to network module.
-func HandleButtonPress(elevator *types.ElevState, btn types.ButtonEvent, timerAction chan timer.TimerAction, hallOrderCh chan<- types.ButtonEvent, outMsgCh chan<- types.Message[types.Bid]) {
+func HandleCabOrder(elevator *types.ElevState, btn types.ButtonEvent, timerAction chan timer.TimerAction, hallOrderCh chan<- types.ButtonEvent, outMsgCh chan<- types.Message[types.Bid]) {
 	if btn.Button == types.BT_Cab || elevio.GetFloor() == -1 {
 		MoveElevator(elevator, btn, timerAction)
 	} else if hallOrderCh != nil {

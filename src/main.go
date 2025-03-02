@@ -4,55 +4,42 @@ package main
 import (
 	"flag"
 	"fmt"
-	"time"
-	"log/slog"
 
 	"multivator/lib/driver-go/elevio"
-	"multivator/lib/network-go/network/bcast"
-	"multivator/lib/network-go/network/peers"
 	"multivator/src/config"
 	"multivator/src/elev"
-	"multivator/src/network"
+	//"multivator/src/network"
 	"multivator/src/timer"
 	"multivator/src/types"
 )
 
-func main() {
-	// Initialize elevator subsystem
+	func main() {
 	nodeID := flag.Int("id", 0, "Node ID of the elevator")
 	flag.Parse()
 	port := 15657 + *nodeID
+
 	elev.InitLogger()
+
 	elevio.Init(fmt.Sprintf("localhost:%d", port), config.NumFloors)
+	elevator := elev.InitElevState(*nodeID)
 
 	drv_buttons, drv_floors, drv_obstr, drv_stop := elev.InitHW()
-	elevator := elev.InitElevState(*nodeID)
+	doorTimerTimeout, doorTimerAction := timer.Init()
 	elev.InitElevPos(elevator)
 
-	hallOrderCh := make(chan types.ButtonEvent)
-
-	doorTimerDuration := time.NewTimer(config.DoorOpenDuration)
-	doorTimerTimeout := make(chan bool)
-	doorTimerAction := make(chan timer.TimerAction)
-	go timer.Timer(doorTimerDuration, doorTimerTimeout, doorTimerAction)
-
-	// Initialize network subsystem
-	bidTx, bidRx, hallOrderTx, hallOrderRx, hallArrivalTx, hallArrivalRx, peerUpdateCh := network.InitChannels[any]()
-
-	go bcast.Transmitter(config.BcastPort, bidTx, hallOrderTx, hallArrivalTx)
-	go bcast.Receiver(config.BcastPort, bidRx, hallOrderRx, hallArrivalRx)
-	go peers.Transmitter(config.PeersPort, fmt.Sprintf("node-%d", elevator.NodeID), make(chan bool))
-	go peers.Receiver(config.PeersPort, peerUpdateCh)
-	slog.Info("Network subsystem initialized")
+	// 8. Initialize network last
+	//bidTx, bidRx, hallArrivalTx, hallArrivalRx, peerUpdateCh := network.Init(elevator)
 
 	for {
 		select {
-			
-		// Elevator subsystem
+
+		// Elevator
 		case btn := <-drv_buttons:
-			slog.Info("New event:","Btn:", btn)
-			elev.HandleButtonPress(elevator, btn, doorTimerAction, hallOrderCh, bidTx)
-			slog.Info("HandleButtonPress done")
+			if btn.Button == types.BT_Cab {
+				elev.MoveElevator(elevator, btn, doorTimerAction)
+			} //else {
+				//network.HandleHallOrder(elevator, btn, doorTimerAction, bidTx)
+			//}
 		case floor := <-drv_floors:
 			elev.HandleFloorArrival(elevator, floor, doorTimerAction)
 		case obstruction := <-drv_obstr:
@@ -62,15 +49,13 @@ func main() {
 		case <-doorTimerTimeout:
 			elev.HandleDoorTimeout(elevator, doorTimerAction)
 
-		// Network subsystem
-		case bid := <-bidRx:
-			network.HandleBid(elevator, bid)
-		case hallArrival := <-hallArrivalRx:
-			network.HandleHallArrival(elevator, hallArrival)
-		case peerUpdate := <-peerUpdateCh:
-			network.HandlePeerUpdates(peerUpdate)
-		case hallOrder := <-hallOrderCh:
-			network.HandleHallOrder(elevator, hallOrder, bidTx)
+		// Network
+		// case bid := <-bidRx:
+		// 	network.HandleBid(elevator, bid)
+		// case hallArrival := <-hallArrivalRx:
+		// 	network.HandleHallArrival(elevator, hallArrival, hallArrivalTx)
+		// case peerUpdate := <-peerUpdateCh:
+		// 	network.HandlePeerUpdates(peerUpdate)
 		}
 	}
 }

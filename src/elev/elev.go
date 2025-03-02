@@ -12,11 +12,11 @@ import (
 	"multivator/src/types"
 )
 
-func InitHW() (drv_buttons chan types.ButtonEvent, drv_floors chan int, drv_obstr chan bool, drv_stop chan bool) {
-	drv_buttons = make(chan types.ButtonEvent)
-	drv_floors = make(chan int)
-	drv_obstr = make(chan bool)
-	drv_stop = make(chan bool)
+func InitHW() (chan types.ButtonEvent, chan int, chan bool, chan bool) {
+	drv_buttons := make(chan types.ButtonEvent)
+	drv_floors := make(chan int)
+	drv_obstr := make(chan bool)
+	drv_stop := make(chan bool)
 
 	go elevio.PollButtons(drv_buttons)
 	go elevio.PollFloorSensor(drv_floors)

@@ -60,11 +60,9 @@ func PollButtons(receiver chan<- types.ButtonEvent) {
 			for b := types.ButtonType(0); b < 3; b++ {
 				v := GetButton(b, f)
 				if v != prev[f][b] && v {
-					fmt.Println("Button pressed:", f, b)
 					receiver <- types.ButtonEvent{
 						Floor:  f,
 						Button: types.ButtonType(b)}
-					fmt.Println("Button event sent")
 				}
 				prev[f][b] = v
 			}

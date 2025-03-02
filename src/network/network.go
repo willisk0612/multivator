@@ -1,30 +1,39 @@
 package network
 
 import (
+	"fmt"
 	"multivator/lib/driver-go/elevio"
+	"multivator/lib/network-go/network/bcast"
+	"multivator/lib/network-go/network/peers"
 	"multivator/src/config"
 	"multivator/src/elev"
+	"multivator/src/timer"
 	"multivator/src/types"
 	"time"
 )
 
-func InitChannels[T any]() (
-	bidTx chan types.Message[types.Bid],
-	bidRx chan types.Message[types.Bid],
-	hallOrderTx chan types.Message[types.HallOrder],
-	hallOrderRx chan types.Message[types.HallOrder],
-	hallArrivalTx chan types.Message[types.HallArrival],
-	hallArrivalRx chan types.Message[types.HallArrival],
-	peerUpdateCh chan types.PeerUpdate,
+func Init(elevator *types.ElevState) (
+	chan types.Message[types.Bid],
+	chan types.Message[types.Bid],
+	chan types.Message[types.HallArrival],
+	chan types.Message[types.HallArrival],
+	chan types.PeerUpdate,
 ) {
-	bidTx = make(chan types.Message[types.Bid])
-	bidRx = make(chan types.Message[types.Bid])
-	hallOrderTx = make(chan types.Message[types.HallOrder])
-	hallOrderRx = make(chan types.Message[types.HallOrder])
-	hallArrivalTx = make(chan types.Message[types.HallArrival])
-	hallArrivalRx = make(chan types.Message[types.HallArrival])
-	peerUpdateCh = make(chan types.PeerUpdate)
-	return bidTx, bidRx, hallOrderTx, hallOrderRx, hallArrivalTx, hallArrivalRx, peerUpdateCh
+	bidTx := make(chan types.Message[types.Bid])
+	bidRx := make(chan types.Message[types.Bid])
+	hallArrivalTx := make(chan types.Message[types.HallArrival])
+	hallArrivalRx := make(chan types.Message[types.HallArrival])
+	peerUpdateCh := make(chan types.PeerUpdate)
+
+	bidMsgBuf := make(chan types.Message[types.Bid])
+	hallArrivalMsgBuf := make(chan types.Message[types.HallArrival])
+
+	go bcast.Transmitter(config.BcastPort, bidTx, hallArrivalTx)
+	go bcast.Receiver(config.BcastPort, bidRx, hallArrivalRx)
+	go peers.Transmitter(config.PeersPort, fmt.Sprintf("node-%d", elevator.NodeID), make(chan bool))
+	go peers.Receiver(config.PeersPort, peerUpdateCh)
+	go msgBuffer(bidMsgBuf, hallArrivalMsgBuf, bidTx, hallArrivalTx)
+	return bidTx, bidRx, hallArrivalTx, hallArrivalRx, peerUpdateCh
 }
 
 // HandleBid processes incoming bids from other elevators
@@ -74,7 +83,12 @@ func HandleBid(elevator *types.ElevState, msg types.Message[types.Bid]) {
 	}
 }
 
-func HandleHallOrder(elevator *types.ElevState, event types.ButtonEvent, bidTx chan types.Message[types.Bid]) {
+func HandleHallOrder(elevator *types.ElevState, event types.ButtonEvent, doorTimerAction chan timer.TimerAction, txBuffer chan types.Message[types.Bid]) {
+	// If single elevator, move elevator and return
+	if len(getPeers()) < 2 {
+		elev.MoveElevator(elevator, event, doorTimerAction)
+		return
+	}
 	msg := types.Message[types.Bid]{
 		Type:      types.BidMsg,
 		Content:   types.Bid{Order: event},
@@ -83,7 +97,6 @@ func HandleHallOrder(elevator *types.ElevState, event types.ButtonEvent, bidTx c
 	}
 
 	cost := elev.Cost(elevator, event)
-	// Append cost to []time.Duration in Bid struct in []types.Bid in ElevState
 	elevator.Bids = append(elevator.Bids,
 		types.Bid{
 			NodeID: elevator.NodeID,
@@ -91,7 +104,7 @@ func HandleHallOrder(elevator *types.ElevState, event types.ButtonEvent, bidTx c
 			Cost:   []time.Duration{cost},
 		},
 	)
-	SendMsgs(msg, bidTx)
+	txBuffer <- msg
 }
 
 // determineWinner returns the NodeID of the elevator with the lowest bid
@@ -122,7 +135,7 @@ func clearBidsForOrder(elevator *types.ElevState, event types.ButtonEvent) {
 }
 
 // HandleHallArrival processes notifications that an elevator has arrived at a hall call
-func HandleHallArrival(elevator *types.ElevState, msg types.Message[types.HallArrival]) {
+func HandleHallArrival(elevator *types.ElevState, msg types.Message[types.HallArrival], hallArrivalTx chan types.Message[types.HallArrival]) {
 	// Ignore own hall arrivals
 	if msg.SenderID == elevator.NodeID {
 		return
@@ -138,9 +151,25 @@ func HandleHallArrival(elevator *types.ElevState, msg types.Message[types.HallAr
 	elevio.SetButtonLamp(msg.Content.Order.Button, msg.Content.Order.Floor, false)
 }
 
-func SendMsgs[T types.MsgContent](msg types.Message[T], tx chan types.Message[T]) {
-	// Loop through config.MsgRepetitions and send the message and sleep for config.MsgInterval
-	for index := 0; index < config.MsgRepetitions; index++ {
+// msgBuffer listens for messages, and sends a burst of messages at a fixed interval
+func msgBuffer(
+	bidBuf chan types.Message[types.Bid],
+	hallBuf chan types.Message[types.HallArrival],
+	bidTx chan types.Message[types.Bid],
+	hallArrivalTx chan types.Message[types.HallArrival],
+) {
+	for {
+		select {
+		case msg := <-bidBuf:
+			burstTransmit(msg, bidTx)
+		case msg := <-hallBuf:
+			burstTransmit(msg, hallArrivalTx)
+		}
+	}
+}
+
+func burstTransmit[T types.MsgContent](msg types.Message[T], tx chan types.Message[T]) {
+	for i := 0; i < config.MsgRepetitions; i++ {
 		tx <- msg
 		time.Sleep(config.MsgInterval)
 	}

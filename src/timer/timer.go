@@ -14,7 +14,15 @@ const (
 	Stop
 )
 
-func Timer(duration *time.Timer, timeout chan bool, action <-chan TimerAction) {
+func Init() (chan bool, chan TimerAction) {
+	doorTimerTimeout := make(chan bool)
+	doorTimerAction := make(chan TimerAction)
+	doorTimerDuration := time.NewTimer(config.DoorOpenDuration)
+	go runTimer(doorTimerDuration, doorTimerTimeout, doorTimerAction)
+	return doorTimerTimeout, doorTimerAction
+}
+
+func runTimer(duration *time.Timer, timeout chan bool, action <-chan TimerAction) {
 	for {
 		select {
 		case a := <-action:
