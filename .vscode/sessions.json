@@ -1,6 +1,6 @@
 {
     "theme": "tribe",
-    "active": "default",
+    "active": "elev 2",
     "activateOnStartup": true,
     "keepExistingTerminals": false,
     "sessions": {

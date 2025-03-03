@@ -1,20 +1,20 @@
-// Cost function is calculated and broadcasted every time a button event is stored in the local elevator.
 package elev
 
 import (
 	"time"
+
 	"multivator/src/config"
 	"multivator/src/types"
+
 	"github.com/tiendc/go-deepcopy"
 )
 
+// Cost uses several factors to determine the cost (in seconds) of an elevator taking a hall order.
 func Cost(elevator *types.ElevState, btnEvent types.ButtonEvent) time.Duration {
-	var simElev types.ElevState
+	simElev := new(types.ElevState)
 	if err := deepcopy.Copy(simElev, elevator); err != nil {
 		panic(err)
 	}
-
-	simElev.Orders[elevator.NodeID][btnEvent.Floor][btnEvent.Button] = true
 
 	// Base cost: distance to target floor
 	distance := abs(elevator.Floor - btnEvent.Floor)
@@ -25,11 +25,11 @@ func Cost(elevator *types.ElevState, btnEvent types.ButtonEvent) time.Duration {
 		cost += config.DoorOpenDuration * time.Second
 	}
 
-	// Add significant penalty for each existing order
+	// Add significant penalty for each existing orders
 	orderCount := 0
-	for f := range simElev.Orders {
-		for b := range simElev.Orders[f] {
-			if elevator.Orders[elevator.NodeID][f][b] {
+	for floor := range simElev.Orders[elevator.NodeID] {
+		for button := range config.NumButtons {
+			if simElev.Orders[elevator.NodeID][floor][button] {
 				orderCount++
 			}
 		}
@@ -44,9 +44,10 @@ func Cost(elevator *types.ElevState, btnEvent types.ButtonEvent) time.Duration {
 		}
 	}
 
+	simElev.Orders[elevator.NodeID][btnEvent.Floor][btnEvent.Button] = true
+
 	return cost
 }
-
 
 func getDirection(from, to int) types.MotorDirection {
 	if from < to {

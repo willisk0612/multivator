@@ -8,7 +8,6 @@ type ElevState struct {
 	Orders          [][][]bool // nodeid, floor, button. True if order is active
 	Behaviour       ElevBehaviour
 	Obstructed      bool
-	Bids            []Bid // Contains all bids for all orders
 	CurrentBtnEvent ButtonEvent
 }
 

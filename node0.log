@@ -1,0 +1,28 @@
+time=19:39:10 level=DEBUG source=elev.go:89 msg="Moving down to find first floor"
+time=19:39:13 level=INFO source=main.go:62 msg="Peer update" peerUpdate="{Peers:[node-0] New: Lost:[]}"
+time=19:39:13 level=DEBUG source=fsm.go:37 msg="Continuing past floor" floor=2 direction=0
+time=19:39:13 level=INFO source=main.go:62 msg="Peer update" peerUpdate="{Peers:[node-0 node-2] New: Lost:[]}"
+time=19:39:13 level=INFO source=main.go:62 msg="Peer update" peerUpdate="{Peers:[node-0] New: Lost:[]}"
+time=19:39:13 level=DEBUG source=timer.go:37 msg="Timer timed out"
+time=19:39:13 level=DEBUG source=fsm.go:89 msg="Door timeout ignored - door not open" behaviour=0
+time=19:39:17 level=INFO source=main.go:62 msg="Peer update" peerUpdate="{Peers:[node-0 node-1] New: Lost:[]}"
+time=19:39:22 level=DEBUG source=bid_handler.go:18 msg="Entered HandleBid"
+time=19:39:22 level=DEBUG source=bid_handler.go:21 msg="Received initial bid"
+time=19:39:22 level=DEBUG source=bid_handler.go:38 msg="Stored own bid" HallOrders:="map[0:{BtnEvent:{Floor:0 Button:0} Cost:4s}]"
+time=19:39:22 level=DEBUG source=bid_handler.go:48 msg="Stored received bid" HallOrders:="map[0:{BtnEvent:{Floor:0 Button:0} Cost:4s} 1:{BtnEvent:{Floor:0 Button:0} Cost:6s}]"
+time=19:39:22 level=DEBUG source=bid_handler.go:51 msg="Trying to append response bid cost"
+time=19:39:22 level=DEBUG source=network.go:50 msg="Detected message in buffer" type=0
+time=19:39:22 level=DEBUG source=bid_handler.go:18 msg="Entered HandleBid"
+time=19:39:22 level=DEBUG source=bid_handler.go:64 msg="Received secondary bid"
+time=19:39:22 level=DEBUG source=bid_handler.go:72 msg="Stored secondary bid" HallOrders:="map[0:{BtnEvent:{Floor:0 Button:0} Cost:4s} 1:{BtnEvent:{Floor:0 Button:0} Cost:6s}]"
+time=19:39:22 level=DEBUG source=bid_handler.go:78 msg="Checking if all bids are received" bids:=2 peers:=2
+time=19:39:22 level=DEBUG source=bid_handler.go:93 msg="Entered findAssignee"
+time=19:39:22 level=DEBUG source=bid_handler.go:108 msg="Assigning order to" nodeID=0 cost=4s "All bids"="map[0:{BtnEvent:{Floor:0 Button:0} Cost:4s} 1:{BtnEvent:{Floor:0 Button:0} Cost:6s}]"
+time=19:39:22 level=DEBUG source=elev.go:104 msg="Moving elevator" from=2 " to "=0
+time=19:39:25 level=DEBUG source=fsm.go:37 msg="Continuing past floor" floor=1 direction=-1
+time=19:39:27 level=DEBUG source=fsm.go:32 msg="Stopping at floor" floor=0
+time=19:39:27 level=DEBUG source=fsm.go:125 msg="Starting door timer"
+time=19:39:30 level=DEBUG source=timer.go:37 msg="Timer timed out"
+time=19:39:30 level=DEBUG source=fsm.go:93 msg="Door timer expired" floor=0 obstructed=false
+time=19:39:30 level=DEBUG source=fsm.go:103 msg="Closing door and changing state" floor=0
+time=19:48:30 level=INFO source=main.go:62 msg="Peer update" peerUpdate="{Peers:[node-0] New: Lost:[]}"

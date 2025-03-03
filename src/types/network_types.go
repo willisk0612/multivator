@@ -18,15 +18,11 @@ type Message[Content MsgContent] struct {
 }
 
 type MsgContent interface {
-	Bid | HallOrder | HallArrival
-}
-
-type HallOrder struct {
-	Order ButtonEvent
+	Bid | HallArrival
 }
 
 type HallArrival struct {
-	Order ButtonEvent
+	BtnEvent ButtonEvent
 }
 
 type PeerUpdate struct {
@@ -36,7 +32,6 @@ type PeerUpdate struct {
 }
 
 type Bid struct {
-	NodeID int
-	Order ButtonEvent
-	Cost  []time.Duration
+	BtnEvent ButtonEvent
+	Cost     time.Duration
 }
