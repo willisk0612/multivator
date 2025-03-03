@@ -37,7 +37,7 @@ func Init(elevator *types.ElevState) (
 	go msgBuffer(bidTxBuf, bidTx)
 	go msgBuffer(hallArrivalTxBuf, hallArrivalTx)
 
-	return bidTxBuf, bidRx, hallArrivalTx, hallArrivalRx, peerUpdateCh
+	return bidTxBuf, bidRx, hallArrivalTxBuf, hallArrivalRx, peerUpdateCh
 }
 
 // msgBuffer listens for messages, and sends a burst of messages at a fixed interval

@@ -25,7 +25,7 @@ func main() {
 	doorTimerTimeout, doorTimerAction := timer.Init()
 	elev.InitElevPos(elevator)
 
-	bidTxBuf, bidRx, hallArrivalTx, hallArrivalRx, peerUpdateCh := network.Init(elevator)
+	bidTxBuf, bidRx, hallArrivalTxBuf, hallArrivalRx, peerUpdateCh := network.Init(elevator)
 	for {
 		select {
 
@@ -40,7 +40,7 @@ func main() {
 			elev.HandleFloorArrival(elevator, floor, doorTimerAction)
 			btnEvent := elevator.CurrentBtnEvent
 			if btnEvent.Button != types.BT_Cab {
-				network.TransmitHallArrival(elevator, btnEvent, hallArrivalTx)
+				network.TransmitHallArrival(elevator, btnEvent, hallArrivalTxBuf)
 			}
 
 		case obstruction := <-drv_obstr:
@@ -52,7 +52,7 @@ func main() {
 
 		// Network communication
 		case bid := <-bidRx:
-			network.HandleBid(elevator, bid, bidTxBuf, doorTimerAction)
+			network.HandleBid(elevator, bid, bidTxBuf, hallArrivalTxBuf, doorTimerAction)
 		case hallArrival := <-hallArrivalRx:
 			network.HandleHallArrival(elevator, hallArrival)
 		case update := <-peerUpdateCh:
