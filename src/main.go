@@ -21,16 +21,17 @@ func main() {
 
 	elevio.Init(fmt.Sprintf("localhost:%d", port), config.NumFloors)
 	elevator := elev.InitElevState(*nodeID)
-	drv_buttons, drv_floors, drv_obstr, drv_stop := elev.InitHW()
+	drv_buttons, drv_floors, drv_obstr, drv_stop := elev.InitDriver()
 	doorTimerTimeout, doorTimerAction := timer.Init()
 	elev.InitElevPos(elevator)
 
-	bidTxBuf, bidRx, hallArrivalTxBuf, hallArrivalRx, peerUpdateCh := network.Init(elevator)
+	bidTxBuf, bidRxbuf, hallArrivalTxBuf, hallArrivalRxBuf, peerUpdateCh := network.Init(elevator)
 	for {
 		select {
 
 		// Elevator control
 		case btn := <-drv_buttons:
+			slog.Debug("Button press received", "button", elev.FormatBtnEvent(btn))
 			if btn.Button == types.BT_Cab {
 				elev.MoveElevator(elevator, btn, doorTimerAction)
 			} else {
@@ -39,7 +40,7 @@ func main() {
 		case floor := <-drv_floors:
 			elev.HandleFloorArrival(elevator, floor, doorTimerAction)
 			btnEvent := elevator.CurrentBtnEvent
-			if btnEvent.Button != types.BT_Cab {
+			if btnEvent.Button != types.BT_Cab && elevator.Behaviour == types.DoorOpen {
 				network.TransmitHallArrival(elevator, btnEvent, hallArrivalTxBuf)
 			}
 
@@ -51,9 +52,9 @@ func main() {
 			elev.HandleDoorTimeout(elevator, doorTimerAction)
 
 		// Network communication
-		case bid := <-bidRx:
+		case bid := <-bidRxbuf:
 			network.HandleBid(elevator, bid, bidTxBuf, hallArrivalTxBuf, doorTimerAction)
-		case hallArrival := <-hallArrivalRx:
+		case hallArrival := <-hallArrivalRxBuf:
 			network.HandleHallArrival(elevator, hallArrival)
 		case update := <-peerUpdateCh:
 			network.PeerUpdate.Peers = update.Peers

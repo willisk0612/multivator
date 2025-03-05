@@ -3,7 +3,7 @@ package config
 import "time"
 
 const (
-	NumPeers         = 2 // Currently only testing with 2 peers
+	NumPeers         = 2
 	NumFloors        = 4
 	NumButtons       = 3
 	SensorPollRate   = 25 * time.Millisecond

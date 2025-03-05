@@ -29,24 +29,15 @@ func HandleFloorArrival(elevator *types.ElevState, floor int, timerAction chan t
 	elevio.SetFloorIndicator(floor)
 
 	if shouldStop(elevator) {
-		slog.Debug("Stopping at floor", "floor", floor)
 		elevio.SetMotorDirection(types.MD_Stop)
 		clearFloor(elevator)
 		OpenDoor(elevator, timerAction)
-	} else {
-		slog.Debug("Continuing past floor",
-			"floor", floor,
-			"direction", elevator.Dir)
 	}
 }
 
 // Monitors obstruction state and stops elevator and door from closing if obstruction is detected.
 func HandleObstruction(elevator *types.ElevState, obstruction bool, timerAction chan timer.TimerAction) {
 	elevator.Obstructed = obstruction
-	slog.Debug("Obstruction state changed",
-		"obstructed", obstruction,
-		"floor", elevator.Floor,
-		"behaviour", elevator.Behaviour)
 
 	if obstruction {
 		elevio.SetMotorDirection(types.MD_Stop)
@@ -54,14 +45,12 @@ func HandleObstruction(elevator *types.ElevState, obstruction bool, timerAction 
 			OpenDoor(elevator, timerAction)
 		} else {
 			elevator.Behaviour = types.Idle
-			slog.Debug("Stopped between floors due to obstruction")
 		}
 	} else {
 		if elevator.Behaviour == types.DoorOpen {
 			timerAction <- timer.Start
-			slog.Debug("Obstruction cleared, restarting door timer")
 		} else {
-			pair := chooseDirIdle(elevator)
+			pair := chooseDirection(elevator)
 			elevator.Dir = pair.Dir
 
 			if pair.Behaviour == types.Moving {
@@ -86,27 +75,18 @@ func HandleStop(elevator *types.ElevState) {
 // Handles door timeout with obstruction check.
 func HandleDoorTimeout(elevator *types.ElevState, timerAction chan<- timer.TimerAction) {
 	if elevator.Behaviour != types.DoorOpen {
-		slog.Debug("Door timeout ignored - door not open",
-			"behaviour", elevator.Behaviour)
 		return
 	}
-	slog.Debug("Door timer expired",
-		"floor", elevator.Floor,
-		"obstructed", elevator.Obstructed)
 
 	if elevator.Obstructed {
-		slog.Debug("Door obstructed, keeping open and restarting timer")
 		timerAction <- timer.Start
 		return
 	}
-
-	slog.Debug("Closing door and changing state",
-		"floor", elevator.Floor)
 	elevio.SetDoorOpenLamp(false)
 	elevator.Behaviour = types.Idle
 	clearFloor(elevator)
 
-	pair := chooseDirIdle(elevator)
+	pair := chooseDirection(elevator)
 	elevator.Dir = pair.Dir
 
 	if pair.Behaviour == types.Moving {
@@ -122,6 +102,5 @@ func OpenDoor(elevator *types.ElevState, timerAction chan<- timer.TimerAction) {
 	}
 	elevator.Behaviour = types.DoorOpen
 	elevio.SetDoorOpenLamp(true)
-	slog.Debug("Starting door timer")
 	timerAction <- timer.Start
 }

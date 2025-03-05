@@ -52,72 +52,57 @@ func clearOrderAndLamp(elevator *types.ElevState, btn types.ButtonType) {
 	elevio.SetButtonLamp(btn, elevator.Floor, false)
 }
 
+// Checks if elevator should stop at current floor.
 func shouldStop(elevator *types.ElevState) bool {
-	currentorders := elevator.Orders[elevator.NodeID][elevator.Floor]
-
-	if currentorders[types.BT_Cab] ||
-		currentorders[types.BT_HallUp] ||
-		currentorders[types.BT_HallDown] {
+	switch elevator.Dir {
+	case types.MD_Up:
+		return elevator.Orders[elevator.NodeID][elevator.Floor][types.BT_HallUp] || elevator.Orders[elevator.NodeID][elevator.Floor][types.BT_Cab] || ordersAbove(elevator) == 0
+	case types.MD_Down:
+		return elevator.Orders[elevator.NodeID][elevator.Floor][types.BT_HallDown] || elevator.Orders[elevator.NodeID][elevator.Floor][types.BT_Cab] || ordersBelow(elevator) == 0
+	default:
 		return true
 	}
-
-	// Always stop at edge floors
-	if elevator.Floor == 0 || elevator.Floor == config.NumFloors-1 {
-		return true
-	}
-
-	return false
 }
 
-// Algorithm that only goes as far as the final order in that direction, then reverses.
-func chooseDirIdle(elevator *types.ElevState) types.DirnBehaviourPair {
-	var pair types.DirnBehaviourPair
-
-	if elevator.Dir == types.MD_Stop {
+// Algorithm for choosing direction of elevator.
+//  1. If elevator is stopped, choose direction in which there are orders.
+//  2. If elevator is moving, continue in the same direction until there are no more orders in that direction.
+func chooseDirection(elevator *types.ElevState) types.DirnBehaviourPair {
+	switch elevator.Dir {
+	case types.MD_Stop:
 		switch {
 		case ordersAbove(elevator) > 0:
-			pair = types.DirnBehaviourPair{Dir: types.MD_Up, Behaviour: types.Moving}
+			return types.DirnBehaviourPair{Dir: types.MD_Up, Behaviour: types.Moving}
+		case ordersHere(elevator) > 0:
+			return types.DirnBehaviourPair{Dir: types.MD_Stop, Behaviour: types.DoorOpen}
 		case ordersBelow(elevator) > 0:
-			pair = types.DirnBehaviourPair{Dir: types.MD_Down, Behaviour: types.Moving}
+			return types.DirnBehaviourPair{Dir: types.MD_Down, Behaviour: types.Moving}
 		default:
-			pair = types.DirnBehaviourPair{Dir: types.MD_Stop, Behaviour: types.Idle}
+			return types.DirnBehaviourPair{Dir: types.MD_Stop, Behaviour: types.Idle}
 		}
-	} else {
-		pair = chooseDirMoving(elevator, elevator.Dir)
-	}
-
-	if pair.Behaviour == types.Moving {
-		if elevator.Behaviour == types.DoorOpen {
-			pair.Behaviour = types.Idle
-			pair.Dir = types.MD_Stop
-		}
-	}
-	return pair
-}
-
-func chooseDirMoving(elevator *types.ElevState, dir types.MotorDirection) types.DirnBehaviourPair {
-	switch dir {
 	case types.MD_Up:
-		if ordersAbove(elevator) > 0 {
-			return types.DirnBehaviourPair{Dir: dir, Behaviour: types.Moving}
+		switch {
+		case ordersAbove(elevator) > 0:
+			return types.DirnBehaviourPair{Dir: types.MD_Up, Behaviour: types.Moving}
+		case ordersBelow(elevator) > 0:
+			return types.DirnBehaviourPair{Dir: types.MD_Down, Behaviour: types.Moving}
+		case ordersHere(elevator) > 0:
+			return types.DirnBehaviourPair{Dir: types.MD_Stop, Behaviour: types.DoorOpen}
+		default:
+			return types.DirnBehaviourPair{Dir: types.MD_Stop, Behaviour: types.Idle}
 		}
 	case types.MD_Down:
-		if ordersBelow(elevator) > 0 {
-			return types.DirnBehaviourPair{Dir: dir, Behaviour: types.Moving}
+		switch {
+		case ordersHere(elevator) > 0:
+			return types.DirnBehaviourPair{Dir: types.MD_Stop, Behaviour: types.DoorOpen}
+		case ordersAbove(elevator) > 0:
+			return types.DirnBehaviourPair{Dir: types.MD_Up, Behaviour: types.Moving}
+		case ordersBelow(elevator) > 0:
+			return types.DirnBehaviourPair{Dir: types.MD_Down, Behaviour: types.Moving}
+		default:
+			return types.DirnBehaviourPair{Dir: types.MD_Stop, Behaviour: types.Idle}
 		}
 	}
-
-	if ordersHere(elevator) > 0 {
-		return types.DirnBehaviourPair{Dir: types.MD_Stop, Behaviour: types.DoorOpen}
-	}
-
-	// Check opposite direction if no orders in current direction.
-	if dir == types.MD_Up && ordersBelow(elevator) > 0 {
-		return types.DirnBehaviourPair{Dir: types.MD_Down, Behaviour: types.Moving}
-	} else if dir == types.MD_Down && ordersAbove(elevator) > 0 {
-		return types.DirnBehaviourPair{Dir: types.MD_Up, Behaviour: types.Moving}
-	}
-
 	return types.DirnBehaviourPair{Dir: types.MD_Stop, Behaviour: types.Idle}
 }
 

@@ -2,7 +2,7 @@ package network
 
 import (
 	"fmt"
-	"log/slog"
+	//"log/slog"
 	"time"
 
 	"multivator/lib/network-go/network/bcast"
@@ -23,32 +23,44 @@ func Init(elevator *types.ElevState) (
 	bidTx := make(chan types.Message[types.Bid], 10)
 	bidTxBuf := make(chan types.Message[types.Bid], 10)
 	bidRx := make(chan types.Message[types.Bid], 10)
+	bidRxBuf := make(chan types.Message[types.Bid], 10)
 	hallArrivalTx := make(chan types.Message[types.HallArrival], 10)
 	hallArrivalTxBuf := make(chan types.Message[types.HallArrival], 10)
 	hallArrivalRx := make(chan types.Message[types.HallArrival], 10)
+	hallArrivalRxBuf := make(chan types.Message[types.HallArrival], 10)
 	peerUpdateCh := make(chan types.PeerUpdate)
 
-	HallOrders = make(map[types.ButtonEvent]map[int]types.Bid)
+	hallOrders = make(map[types.ButtonEvent]map[int]types.Bid)
 
 	go bcast.Transmitter(config.BcastPort, bidTx, hallArrivalTx)
 	go bcast.Receiver(config.BcastPort, bidRx, hallArrivalRx)
 	go peers.Transmitter(config.PeersPort, fmt.Sprintf("node-%d", elevator.NodeID), make(chan bool))
 	go peers.Receiver(config.PeersPort, peerUpdateCh)
-	go msgBuffer(bidTxBuf, bidTx)
-	go msgBuffer(hallArrivalTxBuf, hallArrivalTx)
+	go msgBufferTx(bidTxBuf, bidTx)
+	go msgBufferTx(hallArrivalTxBuf, hallArrivalTx)
+	go msgBufferRx(bidRx, bidRxBuf)
+	go msgBufferRx(hallArrivalRx, hallArrivalRxBuf)
 
-	return bidTxBuf, bidRx, hallArrivalTxBuf, hallArrivalRx, peerUpdateCh
+	return bidTxBuf, bidRxBuf, hallArrivalTxBuf, hallArrivalRxBuf, peerUpdateCh
 }
 
-// msgBuffer listens for messages, and sends a burst of messages at a fixed interval
-func msgBuffer[T types.MsgContent](msgBuf chan types.Message[T], msgTx chan types.Message[T]) {
+// msgBufferTx listens for messages, and sends a burst of messages at a fixed interval
+func msgBufferTx[T types.MsgContent](msgBuf chan types.Message[T], msgTx chan types.Message[T]) {
 	for msg := range msgBuf {
-		slog.Debug("Detected message in buffer", "type", msg.Type)
+		// slog.Debug("Detected message in buffer", "type", msg.Type)
 		burstTransmit(msg, msgTx)
 	}
 }
 
-func burstTransmit[T types.MsgContent](msg types.Message[T], tx chan types.Message[T]) {
+// msgBufferRx listens for messages, and forwards them to a buffer
+func msgBufferRx[T types.MsgContent](msgRx chan types.Message[T], msgRxBuf chan types.Message[T]) {
+	for msg := range msgRx {
+		// slog.Debug("Buffering received message", "type", msg.Type)
+		msgRxBuf <- msg
+	}
+}
+
+func burstTransmit[T types.MsgContent](msg types.Message[T], tx chan<- types.Message[T]) {
 	for i := 0; i < config.MsgRepetitions; i++ {
 		tx <- msg
 		time.Sleep(config.MsgInterval)

@@ -25,6 +25,12 @@ type HallArrival struct {
 	BtnEvent ButtonEvent
 }
 
+type BufferedEvent struct {
+	EventType      string
+	BidMsg         Message[Bid]
+	HallArrivalMsg Message[HallArrival]
+}
+
 type PeerUpdate struct {
 	Peers []string
 	New   string

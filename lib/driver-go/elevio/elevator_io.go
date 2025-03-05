@@ -4,7 +4,6 @@ package elevio
 
 import (
 	"fmt"
-	"log/slog"
 	"multivator/src/config"
 	"multivator/src/types"
 	"net"
@@ -61,11 +60,9 @@ func PollButtons(receiver chan<- types.ButtonEvent) {
 			for b := types.ButtonType(0); b < 3; b++ {
 				v := GetButton(b, f)
 				if v != prev[f][b] && v {
-					slog.Debug("Button pressed", "floor", f, "button", b)
 					receiver <- types.ButtonEvent{
 						Floor:  f,
 						Button: types.ButtonType(b)}
-					slog.Debug("Button event sent", "floor", f, "button", b)
 				}
 				prev[f][b] = v
 			}

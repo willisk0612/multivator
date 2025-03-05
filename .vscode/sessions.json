@@ -1,10 +1,28 @@
 {
     "theme": "tribe",
-    "active": "elev 2",
+    "active": "default",
     "activateOnStartup": true,
     "keepExistingTerminals": false,
     "sessions": {
         "default": [
+            {
+                "name": "2-multivator",
+                "autoExecuteCommands": true,
+                "commands": [
+                    "./lib/simulator/2-multivator.bat"
+                ]
+            }
+        ],
+        "3-multivator": [
+            {
+                "name": "3-multivator",
+                "autoExecuteCommands": true,
+                "commands": [
+                    "./lib/simulator/3-multivator.bat"
+                ]
+            }
+        ],
+        "elev 1": [
             [
                 {
                     "name": "Simulator 1",

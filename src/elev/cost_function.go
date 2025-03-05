@@ -1,6 +1,7 @@
 package elev
 
 import (
+	"log/slog"
 	"time"
 
 	"multivator/src/config"
@@ -9,59 +10,67 @@ import (
 	"github.com/tiendc/go-deepcopy"
 )
 
-// Cost uses several factors to determine the cost (in seconds) of an elevator taking a hall order.
-func Cost(elevator *types.ElevState, btnEvent types.ButtonEvent) time.Duration {
+func TimeToServeOrder(elevator *types.ElevState, btnEvent types.ButtonEvent) time.Duration {
 	simElev := new(types.ElevState)
-	if err := deepcopy.Copy(simElev, elevator); err != nil {
-		panic(err)
+	err := deepcopy.Copy(simElev, elevator)
+	if err != nil {
+		slog.Error("Failed to copy elevator state", "Error", err)
 	}
-
-	// Base cost: distance to target floor
-	distance := abs(elevator.Floor - btnEvent.Floor)
-	cost := time.Duration(distance) * 2 * time.Second
-
-	// Add penalty for door being open
-	if simElev.Behaviour == types.DoorOpen {
-		cost += config.DoorOpenDuration * time.Second
-	}
-
-	// Add significant penalty for each existing orders
-	orderCount := 0
-	for floor := range simElev.Orders[elevator.NodeID] {
-		for button := range config.NumButtons {
-			if simElev.Orders[elevator.NodeID][floor][button] {
-				orderCount++
+	simElev.Orders[simElev.NodeID][btnEvent.Floor][btnEvent.Button] = true
+	// Log for debugging purposes
+	for nodeID := range simElev.Orders {
+		for floor := range simElev.Orders[nodeID] {
+			for btn, isActive := range simElev.Orders[nodeID][floor] {
+				if isActive {
+					btnEvent := types.ButtonEvent{
+						Floor:  floor,
+						Button: types.ButtonType(btn),
+					}
+					slog.Debug("Active order", "nodeID", nodeID, "button", FormatBtnEvent(btnEvent))
+				}
 			}
 		}
 	}
-	cost += time.Duration(orderCount) * 4 * time.Second
 
-	// Add penalty if elevator needs to change direction
-	if elevator.Dir != types.MD_Stop {
-		targetDir := getDirection(elevator.Floor, btnEvent.Floor)
-		if targetDir != elevator.Dir {
-			cost += 4 * time.Second
+	duration := time.Duration(0)
+
+	switch simElev.Behaviour {
+	case types.Idle:
+		simElev.Dir = chooseDirection(simElev).Dir
+		if simElev.Dir == types.MD_Stop {
+			// Elevator is already at the floor
+			slog.Debug("FINAL COST", "Duration", duration)
+			return duration
 		}
+	case types.Moving:
+		duration += config.TravelDuration / 2
+		simElev.Floor += int(simElev.Dir)
+	case types.DoorOpen:
+		duration -= config.DoorOpenDuration / 2
 	}
 
-	simElev.Orders[elevator.NodeID][btnEvent.Floor][btnEvent.Button] = true
+	for {
+		if shouldStop(simElev) {
+			shouldClear := ordersToClear(simElev)
 
-	return cost
-}
+			if btnEvent.Floor == simElev.Floor && shouldClear[btnEvent.Button] {
+				slog.Info("FINAL COST", "Duration", duration)
+				if duration < 0 {
+					duration = 0
+				}
+				return duration
+			}
 
-func getDirection(from, to int) types.MotorDirection {
-	if from < to {
-		return types.MD_Up
-	}
-	if from > to {
-		return types.MD_Down
-	}
-	return types.MD_Stop
-}
+			for btn, clear := range shouldClear {
+				if clear {
+					simElev.Orders[simElev.NodeID][simElev.Floor][btn] = false
+				}
+			}
+			duration += config.DoorOpenDuration
+			simElev.Dir = chooseDirection(simElev).Dir
+		}
 
-func abs(x int) int {
-	if x < 0 {
-		return -x
+		simElev.Floor += int(simElev.Dir)
+		duration += config.TravelDuration
 	}
-	return x
 }
