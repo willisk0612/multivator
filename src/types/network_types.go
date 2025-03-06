@@ -19,7 +19,7 @@ type Message[Content MsgContent] struct {
 }
 
 type MsgContent interface {
-	Bid |  SyncOrders
+	Bid | SyncOrders
 }
 
 type PeerUpdate struct {
