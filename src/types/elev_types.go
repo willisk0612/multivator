@@ -5,7 +5,7 @@ type ElevState struct {
 	Floor           int
 	BetweenFloors   bool
 	Dir             MotorDirection
-	Orders          [][][]bool // nodeid, floor, button. True if order is active
+	Orders          [][][]bool // nodeid, floor, buttontype. True if order is active
 	Behaviour       ElevBehaviour
 	Obstructed      bool
 	CurrentBtnEvent ButtonEvent

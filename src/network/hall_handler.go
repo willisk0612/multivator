@@ -3,7 +3,6 @@ package network
 import (
 	"log/slog"
 
-	"multivator/lib/driver-go/elevio"
 	"multivator/src/elev"
 	"multivator/src/timer"
 	"multivator/src/types"
@@ -32,31 +31,5 @@ func HandleHallOrder(elevator *types.ElevState, btnEvent types.ButtonEvent, door
 	storeBid(msg)
 	slog.Debug("Sending initial bid")
 	txBuffer <- msg
-}
-
-// HandleHallArrival processes notifications that an elevator has arrived at a hall call
-func HandleHallArrival(elevator *types.ElevState, msg types.Message[types.HallArrival]) {
-	slog.Debug("Entered HandleHallArrival")
-	// Ignore own hall arrivals
-	if msg.SenderID == elevator.NodeID {
-		return
-	}
-
-	// If order is within bounds, clear it and turn off button lamp
-	if msg.SenderID < len(elevator.Orders) &&
-		msg.Content.BtnEvent.Floor < len(elevator.Orders[msg.SenderID]) {
-		elevator.Orders[msg.SenderID][msg.Content.BtnEvent.Floor][msg.Content.BtnEvent.Button] = false
-		elevio.SetButtonLamp(msg.Content.BtnEvent.Button, msg.Content.BtnEvent.Floor, false)
-	}
-}
-
-// TransmitHallArrival sends a message to the network that the elevator has arrived at a hall call.
-func TransmitHallArrival(elevator *types.ElevState, btnEvent types.ButtonEvent, txBuffer chan types.Message[types.HallArrival]) {
-	slog.Debug("Entered TransmitHallArrival")
-	msg := types.Message[types.HallArrival]{
-		Type:     types.HallArrivalMsg,
-		Content:  types.HallArrival{BtnEvent: btnEvent},
-		SenderID: elevator.NodeID,
-	}
-	txBuffer <- msg
+	slog.Debug("Initial bid sent")
 }

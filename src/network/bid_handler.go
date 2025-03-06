@@ -13,7 +13,7 @@ import (
 // HandleBid processes incoming bids from other elevators. There are two cases:
 //  1. If the bid is initial, store it and respond with our own bid if the bid is not our own.
 //  2. If the bid is secondary, store it and check if we have received all bids. If so, assign the order to the elevator with the lowest bid.
-func HandleBid(elevator *types.ElevState, msg types.Message[types.Bid], bidTxBuf chan types.Message[types.Bid], hallTxBuf chan types.Message[types.HallArrival], doorTimerAction chan timer.TimerAction) {
+func HandleBid(elevator *types.ElevState, msg types.Message[types.Bid], bidTxBuf chan types.Message[types.Bid], syncOrdersTxBuf chan types.Message[types.SyncOrders], doorTimerAction chan timer.TimerAction) {
 	slog.Debug("Entered HandleBid")
 	isOwnBid := msg.SenderID == elevator.NodeID
 	switch {
@@ -53,6 +53,7 @@ func HandleBid(elevator *types.ElevState, msg types.Message[types.Bid], bidTxBuf
 		numBids := len(hallOrders[msg.Content.BtnEvent])
 		numPeers := len(getPeers())
 		slog.Debug("Checking if all bids are received", "bids:", numBids, "peers:", numPeers)
+		slog.Debug("Orders", "orders:", elevator.Orders)
 		if numBids == numPeers {
 			// Determine assignee: take order if local, otherwise set button lamp
 			assignee := findAssignee(msg.Content.BtnEvent)
@@ -60,7 +61,7 @@ func HandleBid(elevator *types.ElevState, msg types.Message[types.Bid], bidTxBuf
 				elev.MoveElevator(elevator, msg.Content.BtnEvent, doorTimerAction)
 				// If the elevator is at the same floor as the order, TransmitHallArrival
 				if elevator.Floor == msg.Content.BtnEvent.Floor {
-					TransmitHallArrival(elevator, msg.Content.BtnEvent, hallTxBuf)
+					TransmitOrderSync(elevator, syncOrdersTxBuf)
 				}
 			} else {
 				elevator.Orders[assignee][msg.Content.BtnEvent.Floor][msg.Content.BtnEvent.Button] = true

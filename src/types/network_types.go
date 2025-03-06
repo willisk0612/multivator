@@ -8,6 +8,7 @@ const (
 	BidMsg MsgType = iota
 	HallOrderMsg
 	HallArrivalMsg
+	SyncOrdersMsg
 )
 
 type Message[Content MsgContent] struct {
@@ -18,17 +19,7 @@ type Message[Content MsgContent] struct {
 }
 
 type MsgContent interface {
-	Bid | HallArrival
-}
-
-type HallArrival struct {
-	BtnEvent ButtonEvent
-}
-
-type BufferedEvent struct {
-	EventType      string
-	BidMsg         Message[Bid]
-	HallArrivalMsg Message[HallArrival]
+	Bid |  SyncOrders
 }
 
 type PeerUpdate struct {
@@ -40,4 +31,8 @@ type PeerUpdate struct {
 type Bid struct {
 	BtnEvent ButtonEvent
 	Cost     time.Duration
+}
+
+type SyncOrders struct {
+	Orders [][][]bool
 }
