@@ -6,46 +6,55 @@ import (
 	"multivator/lib/driver-go/elevio"
 	"multivator/src/config"
 	"multivator/src/types"
+
+	"github.com/tiendc/go-deepcopy"
 )
 
-// Synchronizes all orders between nodes.
-//   - Cab orders are merged with existing orders if restoreCabOrders
-//   - If !restoreCabOrders, cab orders are overwritten by syncOrders.
-//   - Hall orders overwritten by syncOrders.
-func HandleSyncOrders(elevator *types.ElevState, syncOrders types.Message[types.SyncOrders], restoreCabOrders bool) {
-	if syncOrders.SenderID == elevator.NodeID {
+func HandleSync(elevator *types.ElevState, sync types.Message[types.Sync]) {
+	slog.Debug("Entered HandleSync")
+	if sync.SenderID == elevator.NodeID {
 		return // Ignore own messages
 	}
-
-	for node := range syncOrders.Content.Orders {
-		for floor := range syncOrders.Content.Orders[node] {
-			for btn := range syncOrders.Content.Orders[node][floor] {
-				switch types.ButtonType(btn) {
-				case types.BT_Cab:
-					if restoreCabOrders {
-						elevator.Orders[node][floor][btn] = syncOrders.Content.Orders[node][floor][btn]
-					} else {
-						elevator.Orders[node][floor][btn] = elevator.Orders[node][floor][btn] || syncOrders.Content.Orders[node][floor][btn]
-					}
-				default:
-					elevator.Orders[node][floor][btn] = syncOrders.Content.Orders[node][floor][btn]
-				}
-
-			}
-		}
+	syncOrders(elevator, sync)
+	if sync.Content.RestoreCabOrders {
+		syncCabLights(elevator)
 	}
-	syncCabLights(elevator.Orders[elevator.NodeID])
 	syncHallLights(elevator.Orders)
 }
 
-// Synchronizes cab lights with orders.
-func syncCabLights(orders [][]bool) {
-	for floor := range orders {
-		elevio.SetButtonLamp(types.BT_Cab, floor, orders[floor][types.BT_Cab])
+// syncOrders handles order synchronization between nodes
+func syncOrders(elevator *types.ElevState, sync types.Message[types.Sync]) {
+	for node := range sync.Content.Orders {
+		for floor := range sync.Content.Orders[node] {
+			for btn := range sync.Content.Orders[node][floor] {
+				switch types.ButtonType(btn) {
+				case types.BT_Cab:
+					if sync.Content.RestoreCabOrders {
+						// Only restore cab orders for this specific node.
+						if node == elevator.NodeID {
+							elevator.Orders[node][floor][btn] = sync.Content.Orders[node][floor][btn]
+						}
+					} else {
+						// Store cab orders for other nodes without affecting own cab orders.
+						if node != elevator.NodeID {
+							elevator.Orders[node][floor][btn] = sync.Content.Orders[node][floor][btn]
+						}
+					}
+				default:
+					elevator.Orders[node][floor][btn] = sync.Content.Orders[node][floor][btn]
+				}
+			}
+		}
 	}
 }
 
-// Synchronizes hall lights with orders.
+// syncCabLights updates cab lights based on current orders
+func syncCabLights(elevator *types.ElevState) {
+	for floor := range elevator.Orders[elevator.NodeID] {
+		elevio.SetButtonLamp(types.BT_Cab, floor, elevator.Orders[elevator.NodeID][floor][types.BT_Cab])
+	}
+}
+
 func syncHallLights(orders [][][]bool) {
 	syncedOrders := make([][]bool, config.NumFloors)
 	hallUpAndDown := 2
@@ -57,7 +66,7 @@ func syncHallLights(orders [][][]bool) {
 	for node := range orders {
 		for floor := range orders[node] {
 			for btn := range orders[node][floor] {
-				if btn < hallUpAndDown { // Only process hall buttons (0 and 1)
+				if btn < hallUpAndDown {
 					syncedOrders[floor][btn] = syncedOrders[floor][btn] || orders[node][floor][btn]
 				}
 			}
@@ -65,18 +74,26 @@ func syncHallLights(orders [][][]bool) {
 	}
 
 	for floor := range syncedOrders {
-		for btn := 0; btn < hallUpAndDown; btn++ { // Use regular for loop with index
+		for btn := 0; btn < hallUpAndDown; btn++ {
 			elevio.SetButtonLamp(types.ButtonType(btn), floor, syncedOrders[floor][btn])
 		}
 	}
 }
 
-func TransmitOrderSync(elevator *types.ElevState, txBuf chan types.Message[types.SyncOrders]) {
+// TransmitOrderSync sends a synchronization message to all nodes
+// - performs a deep copy of the orders to avoid data races
+func TransmitOrderSync(elevator *types.ElevState, txBuf chan types.Message[types.Sync], restoreCabOrders bool) {
+	var ordersCopy [][][]bool
+	err := deepcopy.Copy(&ordersCopy, elevator.Orders)
+	if err != nil {
+		slog.Error("Orders deepcopy failed, could not transmit sync.", "error", err)
+		return
+	}
 	slog.Debug("Entered TransmitOrderSync")
-	txBuf <- types.Message[types.SyncOrders]{
-		Type:      types.SyncOrdersMsg,
+	txBuf <- types.Message[types.Sync]{
+		Type:      types.SyncMsg,
 		LoopCount: 0,
-		Content:   types.SyncOrders{Orders: elevator.Orders},
+		Content:   types.Sync{Orders: ordersCopy, RestoreCabOrders: restoreCabOrders},
 		SenderID:  elevator.NodeID,
 	}
 }

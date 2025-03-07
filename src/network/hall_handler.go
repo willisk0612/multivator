@@ -15,7 +15,6 @@ func HandleHallOrder(elevator *types.ElevState, btnEvent types.ButtonEvent, door
 	slog.Debug("Entering HandleHallOrder")
 	// If single elevator, move elevator and return
 	if len(getPeers()) < 2 {
-		slog.Debug("Single elevator")
 		elev.MoveElevator(elevator, btnEvent, doorTimerAction)
 		return
 	}
@@ -29,7 +28,5 @@ func HandleHallOrder(elevator *types.ElevState, btnEvent types.ButtonEvent, door
 		LoopCount: 0,
 	}
 	storeBid(msg)
-	slog.Debug("Sending initial bid")
 	txBuffer <- msg
-	slog.Debug("Initial bid sent")
 }

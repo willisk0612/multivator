@@ -1,7 +1,6 @@
 package timer
 
 import (
-	"log/slog"
 	"time"
 
 	"multivator/src/config"
@@ -34,7 +33,6 @@ func runTimer(duration *time.Timer, timeout chan bool, action <-chan TimerAction
 			}
 		case <-duration.C:
 			timeout <- true
-			slog.Debug("Timer timed out")
 		}
 	}
 }

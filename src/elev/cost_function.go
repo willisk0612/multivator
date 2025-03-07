@@ -10,36 +10,23 @@ import (
 	"github.com/tiendc/go-deepcopy"
 )
 
+// Creates a simulation to calculate the time based on:
+// - State: penalize for moving, reward for door open
+// - Accumulate time for each floor passed
 func TimeToServeOrder(elevator *types.ElevState, btnEvent types.ButtonEvent) time.Duration {
 	simElev := new(types.ElevState)
 	err := deepcopy.Copy(simElev, elevator)
 	if err != nil {
 		slog.Error("Failed to copy elevator state", "Error", err)
+		return time.Duration(100) // Return a high value
 	}
 	simElev.Orders[simElev.NodeID][btnEvent.Floor][btnEvent.Button] = true
-	// Log for debugging purposes
-	for nodeID := range simElev.Orders {
-		for floor := range simElev.Orders[nodeID] {
-			for btn, isActive := range simElev.Orders[nodeID][floor] {
-				if isActive {
-					btnEvent := types.ButtonEvent{
-						Floor:  floor,
-						Button: types.ButtonType(btn),
-					}
-					slog.Debug("Active order", "nodeID", nodeID, "button", FormatBtnEvent(btnEvent))
-				}
-			}
-		}
-	}
-
 	duration := time.Duration(0)
 
 	switch simElev.Behaviour {
 	case types.Idle:
 		simElev.Dir = chooseDirection(simElev).Dir
 		if simElev.Dir == types.MD_Stop {
-			// Elevator is already at the floor
-			slog.Debug("FINAL COST", "Duration", duration)
 			return duration
 		}
 	case types.Moving:
@@ -50,11 +37,10 @@ func TimeToServeOrder(elevator *types.ElevState, btnEvent types.ButtonEvent) tim
 	}
 
 	for {
-		if shouldStop(simElev) {
-			shouldClear := ordersToClear(simElev)
+		if shouldStopHere(simElev) {
+			shouldClear := ordersToClearHere(simElev)
 
 			if btnEvent.Floor == simElev.Floor && shouldClear[btnEvent.Button] {
-				slog.Info("FINAL COST", "Duration", duration)
 				if duration < 0 {
 					duration = 0
 				}

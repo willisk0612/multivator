@@ -27,9 +27,9 @@ The system uses a peer to peer topology. It utilizes UDP broadcasting, with the 
 
 ### Mechanisms
 #### Bidding
-1. On hall orders, initial bids are broadcasted with an estimate cost time.
+1. On hall orders, initial bids (button events with costs) are broadcasted.
 2. The other nodes respond with a reply bid.
-3. Once the number of bids are equal to the number of peers in the network, it chooses an assignee to take the hall order.
+3. Once the number of received bids are equal to the number of peers in the network, it locally chooses an assignee to take the hall order.
 
 #### Synchronization
 
@@ -45,7 +45,7 @@ The system uses a peer to peer topology. It utilizes UDP broadcasting, with the 
 
 ## TODO
 
-  1. Expand ```types.SyncOrders``` to be sent at a regular heartbeat interval. Use a monotonic counter to update states between nodes.
+  1. Expand ```types.Sync``` to be sent at a regular heartbeat interval. Use a monotonic counter to update states between nodes.
   2. Implement a timeout mechanism if all bids are not received.
   3. Reassigning hall orders in case of failures.
 

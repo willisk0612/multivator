@@ -7,17 +7,19 @@ import (
 )
 
 // Clears order and turns off lamp for the current floor and direction
-func clearFloor(elevator *types.ElevState) {
-	clearOrderAndLamp(elevator, types.BT_Cab)
-	shouldClear := ordersToClear(elevator)
+func clearAtCurrentFloor(elevator *types.ElevState) {
+	elevator.Orders[elevator.NodeID][elevator.Floor][types.BT_Cab] = false
+	elevio.SetButtonLamp(types.BT_Cab, elevator.Floor, false)
+	shouldClear := ordersToClearHere(elevator)
 	for btn := range config.NumButtons {
 		if shouldClear[btn] {
-			clearOrderAndLamp(elevator, types.ButtonType(btn))
+			elevator.Orders[elevator.NodeID][elevator.Floor][btn] = false
+			elevio.SetButtonLamp(types.ButtonType(btn), elevator.Floor, false)
 		}
 	}
 }
 
-func ordersToClear(elevator *types.ElevState) [config.NumButtons]bool {
+func ordersToClearHere(elevator *types.ElevState) [config.NumButtons]bool {
 	shouldClear := [config.NumButtons]bool{}
 
 	// At edge floors, clear all orders
@@ -31,12 +33,12 @@ func ordersToClear(elevator *types.ElevState) [config.NumButtons]bool {
 	switch elevator.Dir {
 	case types.MD_Up:
 		shouldClear[types.BT_HallUp] = true
-		if ordersAbove(elevator) == 0 {
+		if !ordersAbove(elevator) {
 			shouldClear[types.BT_HallDown] = true
 		}
 	case types.MD_Down:
 		shouldClear[types.BT_HallDown] = true
-		if ordersBelow(elevator) == 0 {
+		if !ordersBelow(elevator) {
 			shouldClear[types.BT_HallUp] = true
 		}
 	case types.MD_Stop:
@@ -47,18 +49,17 @@ func ordersToClear(elevator *types.ElevState) [config.NumButtons]bool {
 	return shouldClear
 }
 
-func clearOrderAndLamp(elevator *types.ElevState, btn types.ButtonType) {
-	elevator.Orders[elevator.NodeID][elevator.Floor][btn] = false
-	elevio.SetButtonLamp(btn, elevator.Floor, false)
-}
-
 // Checks if elevator should stop at current floor.
-func shouldStop(elevator *types.ElevState) bool {
+func shouldStopHere(elevator *types.ElevState) bool {
 	switch elevator.Dir {
 	case types.MD_Up:
-		return elevator.Orders[elevator.NodeID][elevator.Floor][types.BT_HallUp] || elevator.Orders[elevator.NodeID][elevator.Floor][types.BT_Cab] || ordersAbove(elevator) == 0
+		return elevator.Orders[elevator.NodeID][elevator.Floor][types.BT_HallUp] ||
+			elevator.Orders[elevator.NodeID][elevator.Floor][types.BT_Cab] ||
+			!ordersAbove(elevator)
 	case types.MD_Down:
-		return elevator.Orders[elevator.NodeID][elevator.Floor][types.BT_HallDown] || elevator.Orders[elevator.NodeID][elevator.Floor][types.BT_Cab] || ordersBelow(elevator) == 0
+		return elevator.Orders[elevator.NodeID][elevator.Floor][types.BT_HallDown] ||
+			elevator.Orders[elevator.NodeID][elevator.Floor][types.BT_Cab] ||
+			!ordersBelow(elevator)
 	default:
 		return true
 	}
@@ -69,35 +70,35 @@ func shouldStop(elevator *types.ElevState) bool {
 //  2. If elevator is moving, continue in the same direction until there are no more orders in that direction.
 func chooseDirection(elevator *types.ElevState) types.DirnBehaviourPair {
 	switch elevator.Dir {
-	case types.MD_Stop:
-		switch {
-		case ordersAbove(elevator) > 0:
-			return types.DirnBehaviourPair{Dir: types.MD_Up, Behaviour: types.Moving}
-		case ordersHere(elevator) > 0:
-			return types.DirnBehaviourPair{Dir: types.MD_Stop, Behaviour: types.DoorOpen}
-		case ordersBelow(elevator) > 0:
-			return types.DirnBehaviourPair{Dir: types.MD_Down, Behaviour: types.Moving}
-		default:
-			return types.DirnBehaviourPair{Dir: types.MD_Stop, Behaviour: types.Idle}
-		}
 	case types.MD_Up:
 		switch {
-		case ordersAbove(elevator) > 0:
+		case ordersAbove(elevator):
 			return types.DirnBehaviourPair{Dir: types.MD_Up, Behaviour: types.Moving}
-		case ordersBelow(elevator) > 0:
+		case ordersHere(elevator):
+			return types.DirnBehaviourPair{Dir: types.MD_Down, Behaviour: types.DoorOpen}
+		case ordersBelow(elevator):
 			return types.DirnBehaviourPair{Dir: types.MD_Down, Behaviour: types.Moving}
-		case ordersHere(elevator) > 0:
-			return types.DirnBehaviourPair{Dir: types.MD_Stop, Behaviour: types.DoorOpen}
 		default:
 			return types.DirnBehaviourPair{Dir: types.MD_Stop, Behaviour: types.Idle}
 		}
 	case types.MD_Down:
 		switch {
-		case ordersHere(elevator) > 0:
-			return types.DirnBehaviourPair{Dir: types.MD_Stop, Behaviour: types.DoorOpen}
-		case ordersAbove(elevator) > 0:
+		case ordersBelow(elevator):
+			return types.DirnBehaviourPair{Dir: types.MD_Down, Behaviour: types.Moving}
+		case ordersHere(elevator):
+			return types.DirnBehaviourPair{Dir: types.MD_Up, Behaviour: types.DoorOpen}
+		case ordersAbove(elevator):
 			return types.DirnBehaviourPair{Dir: types.MD_Up, Behaviour: types.Moving}
-		case ordersBelow(elevator) > 0:
+		default:
+			return types.DirnBehaviourPair{Dir: types.MD_Stop, Behaviour: types.Idle}
+		}
+	case types.MD_Stop:
+		switch {
+		case ordersHere(elevator):
+			return types.DirnBehaviourPair{Dir: types.MD_Stop, Behaviour: types.DoorOpen}
+		case ordersAbove(elevator):
+			return types.DirnBehaviourPair{Dir: types.MD_Up, Behaviour: types.Moving}
+		case ordersBelow(elevator):
 			return types.DirnBehaviourPair{Dir: types.MD_Down, Behaviour: types.Moving}
 		default:
 			return types.DirnBehaviourPair{Dir: types.MD_Stop, Behaviour: types.Idle}
@@ -117,14 +118,14 @@ func countOrders(elevator *types.ElevState, startFloor int, endFloor int) (resul
 	return result
 }
 
-func ordersAbove(elevator *types.ElevState) int {
-	return countOrders(elevator, elevator.Floor+1, config.NumFloors)
+func ordersAbove(elevator *types.ElevState) bool {
+	return countOrders(elevator, elevator.Floor+1, config.NumFloors) > 0
 }
 
-func ordersBelow(elevator *types.ElevState) int {
-	return countOrders(elevator, 0, elevator.Floor)
+func ordersBelow(elevator *types.ElevState) bool {
+	return countOrders(elevator, 0, elevator.Floor) > 0
 }
 
-func ordersHere(elevator *types.ElevState) int {
-	return countOrders(elevator, elevator.Floor, elevator.Floor+1)
+func ordersHere(elevator *types.ElevState) bool {
+	return countOrders(elevator, elevator.Floor, elevator.Floor+1) > 0
 }

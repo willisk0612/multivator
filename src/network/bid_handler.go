@@ -13,7 +13,7 @@ import (
 // HandleBid processes incoming bids from other elevators. There are two cases:
 //  1. If the bid is initial, store it and respond with our own bid if the bid is not our own.
 //  2. If the bid is secondary, store it and check if we have received all bids. If so, assign the order to the elevator with the lowest bid.
-func HandleBid(elevator *types.ElevState, msg types.Message[types.Bid], bidTxBuf chan types.Message[types.Bid], syncOrdersTxBuf chan types.Message[types.SyncOrders], doorTimerAction chan timer.TimerAction) {
+func HandleBid(elevator *types.ElevState, msg types.Message[types.Bid], bidTxBuf chan types.Message[types.Bid], syncTxBuf chan types.Message[types.Sync], doorTimerAction chan timer.TimerAction) {
 	slog.Debug("Entered HandleBid")
 	isOwnBid := msg.SenderID == elevator.NodeID
 	switch {
@@ -61,11 +61,12 @@ func HandleBid(elevator *types.ElevState, msg types.Message[types.Bid], bidTxBuf
 				elev.MoveElevator(elevator, msg.Content.BtnEvent, doorTimerAction)
 				// If the elevator is at the same floor as the order, TransmitHallArrival
 				if elevator.Floor == msg.Content.BtnEvent.Floor {
-					TransmitOrderSync(elevator, syncOrdersTxBuf)
+					TransmitOrderSync(elevator, syncTxBuf, false)
 				}
 			} else {
 				elevator.Orders[assignee][msg.Content.BtnEvent.Floor][msg.Content.BtnEvent.Button] = true
 				elevio.SetButtonLamp(msg.Content.BtnEvent.Button, msg.Content.BtnEvent.Floor, true)
+
 			}
 		}
 	}
@@ -73,21 +74,17 @@ func HandleBid(elevator *types.ElevState, msg types.Message[types.Bid], bidTxBuf
 
 func findAssignee(event types.ButtonEvent) int {
 	slog.Debug("Entered findAssignee")
-	var lowestcost time.Duration = time.Hour * 24
-	var assignee int = -1
+	lowestCost := 24 * time.Hour
+	assignee := 0 // Default to node 0
 
-	// Iterate through the map instead of the array
 	for nodeID, bid := range hallOrders[event] {
-		if bid.Cost < lowestcost || (bid.Cost == lowestcost && nodeID < assignee) {
-			lowestcost = bid.Cost
+		if bid.Cost < lowestCost || (bid.Cost == lowestCost && nodeID < assignee) {
+			lowestCost = bid.Cost
 			assignee = nodeID
 		}
 	}
 
-	if assignee == -1 {
-		slog.Error("COULD NOT FIND ASSIGNEE")
-	}
-	slog.Debug("Assigning order to", "nodeID", assignee, "cost", lowestcost, "All bids", hallOrders[event])
+	slog.Debug("Assigning order to", "nodeID", assignee, "cost", lowestCost, "All bids", hallOrders[event])
 	delete(hallOrders, event)
 	return assignee
 }

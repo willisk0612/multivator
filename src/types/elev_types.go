@@ -8,7 +8,6 @@ type ElevState struct {
 	Orders          [][][]bool // nodeid, floor, buttontype. True if order is active
 	Behaviour       ElevBehaviour
 	Obstructed      bool
-	CurrentBtnEvent ButtonEvent
 }
 
 type MotorDirection int
