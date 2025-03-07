@@ -44,7 +44,8 @@ func main() {
 			elev.HandleFloorArrival(elevator, floor, doorTimerAction)
 			network.TransmitOrderSync(elevator, syncTxBuf, false)
 		case obstruction := <-drv_obstr:
-			elev.HandleObstruction(elevator, obstruction, doorTimerAction)
+			elevator.Obstructed = obstruction
+			doorTimerAction <- timer.Start
 		case <-doorTimerTimeout:
 			elev.HandleDoorTimeout(elevator, doorTimerAction)
 

@@ -22,33 +22,6 @@ func HandleFloorArrival(elevator *types.ElevState, floor int, timerAction chan t
 	}
 }
 
-// Monitors obstruction state and stops elevator and door from closing if obstruction is detected.
-func HandleObstruction(elevator *types.ElevState, obstruction bool, timerAction chan timer.TimerAction) {
-	elevator.Obstructed = obstruction
-
-	if obstruction {
-		elevio.SetMotorDirection(types.MD_Stop)
-		if elevio.GetFloor() != -1 {
-			OpenDoor(elevator, timerAction)
-		} else {
-			elevator.Behaviour = types.Idle
-		}
-	} else {
-		if elevator.Behaviour == types.DoorOpen {
-			timerAction <- timer.Start
-		} else {
-			pair := chooseDirection(elevator)
-			elevator.Dir = pair.Dir
-
-			if pair.Behaviour == types.Moving {
-				elevator.Dir = chooseDirection(elevator).Dir
-				elevio.SetMotorDirection(elevator.Dir)
-				elevator.Behaviour = types.Moving
-			}
-		}
-	}
-}
-
 // Handles door timeout with obstruction check.
 func HandleDoorTimeout(elevator *types.ElevState, timerAction chan<- timer.TimerAction) {
 	if elevator.Behaviour != types.DoorOpen {
