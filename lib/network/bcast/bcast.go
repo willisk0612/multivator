@@ -3,7 +3,7 @@ package bcast
 import (
 	"encoding/json"
 	"fmt"
-	"multivator/lib/network-go/network/conn"
+	"multivator/lib/network/conn"
 	"net"
 	"reflect"
 )

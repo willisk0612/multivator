@@ -13,12 +13,12 @@
                 ]
             }
         ],
-        "3-multivator": [
+        "2-multivator race": [
             {
-                "name": "3-multivator",
+                "name": "2-multivator race",
                 "autoExecuteCommands": true,
                 "commands": [
-                    "./lib/simulator/3-multivator.bat"
+                    "./lib/simulator/2-multivator-race.bat"
                 ]
             }
         ],

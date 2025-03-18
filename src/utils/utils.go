@@ -1,26 +1,27 @@
-package elev
+package utils
 
 import (
+	"log/slog"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"strings"
 	"time"
 
+	"multivator/src/config"
 	"multivator/src/types"
 )
 
-func InitLogger(nodeID int) {
-	logFile, err := os.OpenFile(fmt.Sprintf("node%d.log", nodeID), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+func InitLogger() {
+	logFile, err := os.OpenFile(fmt.Sprintf("node%d.log", config.NodeID), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
 		panic(err)
 	}
-
 	multiWriter := io.MultiWriter(os.Stdout, logFile)
-
+	os.Stdout = logFile
+	os.Stderr = logFile
 	handler := slog.NewTextHandler(multiWriter, &slog.HandlerOptions{
-		Level:     slog.LevelDebug,
+		Level:     config.LogLevel,
 		AddSource: true,
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
 			if a.Key == slog.TimeKey {

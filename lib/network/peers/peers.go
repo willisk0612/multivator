@@ -2,8 +2,7 @@ package peers
 
 import (
 	"fmt"
-	"multivator/lib/network-go/network/conn"
-	"multivator/src/types"
+	"multivator/lib/network/conn"
 	"net"
 	"sort"
 	"time"
@@ -11,6 +10,12 @@ import (
 
 const interval = 15 * time.Millisecond
 const timeout = 500 * time.Millisecond
+
+type PeerUpdate struct {
+	Peers []string
+	New   string
+	Lost  []string
+}
 
 func Transmitter(port int, id string, transmitEnable <-chan bool) {
 
@@ -31,10 +36,10 @@ func Transmitter(port int, id string, transmitEnable <-chan bool) {
 	}
 }
 
-func Receiver(port int, peerUpdateCh chan<- types.PeerUpdate) {
+func Receiver(port int, peerUpdateCh chan<- PeerUpdate) {
 
 	var buf [1024]byte
-	var p types.PeerUpdate
+	var p PeerUpdate
 	lastSeen := make(map[string]time.Time)
 
 	conn := conn.DialBroadcastUDP(port)

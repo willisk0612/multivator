@@ -1,6 +1,10 @@
-package types
+package dispatcher
 
-import "time"
+import (
+	"time"
+
+	"multivator/src/types"
+)
 
 type MsgType int
 
@@ -22,18 +26,14 @@ type MsgContent interface {
 	Bid | Sync
 }
 
-type PeerUpdate struct {
-	Peers []string
-	New   string
-	Lost  []string
-}
-
 type Bid struct {
-	BtnEvent ButtonEvent
+	BtnEvent types.ButtonEvent
 	Cost     time.Duration
 }
 
 type Sync struct {
-	Orders           [][][]bool
+	Orders           types.Orders
 	RestoreCabOrders bool
 }
+
+type hallOrders map[types.ButtonEvent]map[int]Bid

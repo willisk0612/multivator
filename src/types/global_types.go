@@ -1,14 +1,16 @@
 package types
 
+import "multivator/src/config"
+
 type ElevState struct {
-	NodeID          int
 	Floor           int
-	BetweenFloors   bool
+	Orders          Orders
 	Dir             MotorDirection
-	Orders          [][][]bool // nodeid, floor, buttontype. True if order is active
 	Behaviour       ElevBehaviour
 	Obstructed      bool
 }
+
+type Orders [config.NumElevators][config.NumFloors][config.NumButtons]bool
 
 type MotorDirection int
 

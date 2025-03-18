@@ -1,9 +1,15 @@
 package config
 
-import "time"
+import (
+	"log/slog"
+	"time"
+)
+
+var NodeID int
 
 const (
-	NumPeers         = 2
+	LogLevel         = slog.LevelDebug
+	NumElevators     = 2
 	NumFloors        = 4
 	NumButtons       = 3
 	SensorPollRate   = 25 * time.Millisecond

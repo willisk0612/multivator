@@ -1,25 +1,26 @@
-package elev
+package executor
 
 import (
-	"multivator/lib/driver-go/elevio"
+	"multivator/lib/driver/elevio"
 	"multivator/src/config"
 	"multivator/src/types"
 )
 
 // Clears order and turns off lamp for the current floor and direction
-func clearAtCurrentFloor(elevator *types.ElevState) {
-	elevator.Orders[elevator.NodeID][elevator.Floor][types.BT_Cab] = false
+func clearAtCurrentFloor(elevator types.ElevState) types.ElevState {
+	elevator.Orders[config.NodeID][elevator.Floor][types.BT_Cab] = false
 	elevio.SetButtonLamp(types.BT_Cab, elevator.Floor, false)
-	shouldClear := ordersToClearHere(elevator)
+	shouldClear := OrdersToClearHere(elevator)
 	for btn := range config.NumButtons {
 		if shouldClear[btn] {
-			elevator.Orders[elevator.NodeID][elevator.Floor][btn] = false
+			elevator.Orders[config.NodeID][elevator.Floor][btn] = false
 			elevio.SetButtonLamp(types.ButtonType(btn), elevator.Floor, false)
 		}
 	}
+	return elevator
 }
 
-func ordersToClearHere(elevator *types.ElevState) [config.NumButtons]bool {
+func OrdersToClearHere(elevator types.ElevState) [config.NumButtons]bool {
 	shouldClear := [config.NumButtons]bool{}
 
 	// At edge floors, clear all orders
@@ -50,15 +51,15 @@ func ordersToClearHere(elevator *types.ElevState) [config.NumButtons]bool {
 }
 
 // Checks if elevator should stop at current floor.
-func shouldStopHere(elevator *types.ElevState) bool {
+func ShouldStopHere(elevator types.ElevState) bool {
 	switch elevator.Dir {
 	case types.MD_Up:
-		return elevator.Orders[elevator.NodeID][elevator.Floor][types.BT_HallUp] ||
-			elevator.Orders[elevator.NodeID][elevator.Floor][types.BT_Cab] ||
+		return elevator.Orders[config.NodeID][elevator.Floor][types.BT_HallUp] ||
+			elevator.Orders[config.NodeID][elevator.Floor][types.BT_Cab] ||
 			!ordersAbove(elevator)
 	case types.MD_Down:
-		return elevator.Orders[elevator.NodeID][elevator.Floor][types.BT_HallDown] ||
-			elevator.Orders[elevator.NodeID][elevator.Floor][types.BT_Cab] ||
+		return elevator.Orders[config.NodeID][elevator.Floor][types.BT_HallDown] ||
+			elevator.Orders[config.NodeID][elevator.Floor][types.BT_Cab] ||
 			!ordersBelow(elevator)
 	default:
 		return true
@@ -68,7 +69,7 @@ func shouldStopHere(elevator *types.ElevState) bool {
 // Algorithm for choosing direction of elevator.
 //  1. If elevator is stopped, choose direction in which there are orders.
 //  2. If elevator is moving, continue in the same direction until there are no more orders in that direction.
-func chooseDirection(elevator *types.ElevState) types.DirnBehaviourPair {
+func ChooseDirection(elevator types.ElevState) types.DirnBehaviourPair {
 	switch elevator.Dir {
 	case types.MD_Up:
 		switch {
@@ -107,10 +108,10 @@ func chooseDirection(elevator *types.ElevState) types.DirnBehaviourPair {
 	return types.DirnBehaviourPair{Dir: types.MD_Stop, Behaviour: types.Idle}
 }
 
-func countOrders(elevator *types.ElevState, startFloor int, endFloor int) (result int) {
+func countOrders(elevator types.ElevState, startFloor int, endFloor int) (result int) {
 	for floor := startFloor; floor < endFloor; floor++ {
 		for btn := range config.NumButtons {
-			if elevator.Orders[elevator.NodeID][floor][btn] {
+			if elevator.Orders[config.NodeID][floor][btn] {
 				result++
 			}
 		}
@@ -118,14 +119,14 @@ func countOrders(elevator *types.ElevState, startFloor int, endFloor int) (resul
 	return result
 }
 
-func ordersAbove(elevator *types.ElevState) bool {
+func ordersAbove(elevator types.ElevState) bool {
 	return countOrders(elevator, elevator.Floor+1, config.NumFloors) > 0
 }
 
-func ordersBelow(elevator *types.ElevState) bool {
+func ordersBelow(elevator types.ElevState) bool {
 	return countOrders(elevator, 0, elevator.Floor) > 0
 }
 
-func ordersHere(elevator *types.ElevState) bool {
+func ordersHere(elevator types.ElevState) bool {
 	return countOrders(elevator, elevator.Floor, elevator.Floor+1) > 0
 }
