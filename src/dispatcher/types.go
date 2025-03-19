@@ -9,17 +9,16 @@ import (
 type MsgType int
 
 const (
-	BidMsg MsgType = iota
-	HallOrderMsg
-	HallArrivalMsg
+	BidInitial MsgType = iota
+	BidReply
 	SyncMsg
 )
 
-type Message[Content MsgContent] struct {
-	Type      MsgType
-	LoopCount int
-	Content   Content
+type Msg[Content MsgContent] struct {
 	SenderID  int
+	Type      MsgType
+	Content   Content
+	LoopCount uint
 }
 
 type MsgContent interface {
@@ -27,8 +26,8 @@ type MsgContent interface {
 }
 
 type Bid struct {
-	BtnEvent types.ButtonEvent
-	Cost     time.Duration
+	Order types.HallOrder
+	Cost  time.Duration
 }
 
 type Sync struct {
@@ -36,4 +35,4 @@ type Sync struct {
 	RestoreCabOrders bool
 }
 
-type hallOrders map[types.ButtonEvent]map[int]Bid
+type BidMap map[types.HallOrder]map[int]time.Duration

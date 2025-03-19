@@ -14,9 +14,9 @@ import (
 
 func Run(elevUpdateCh chan types.ElevState,
 	orderUpdateCh <-chan types.Orders,
-	hallOrderCh chan<- types.ButtonEvent,
-	sendSyncCh chan<- bool) {
-
+	hallOrderCh chan<- types.HallOrder,
+	sendSyncCh chan<- bool,
+) {
 	drvButtons := make(chan types.ButtonEvent)
 	drvFloors := make(chan int)
 	drvObstr := make(chan bool)
@@ -62,7 +62,7 @@ func Run(elevUpdateCh chan types.ElevState,
 				sendSyncCh <- true
 			} else {
 				elevUpdateCh <- elevator
-				hallOrderCh <- btn
+				hallOrderCh <- types.HallOrder{Floor: btn.Floor, Button: types.HallType(btn.Button)}
 			}
 		case floor := <-drvFloors:
 			slog.Debug("Updating floor", "floor", floor)
@@ -77,9 +77,9 @@ func Run(elevUpdateCh chan types.ElevState,
 				elevator.Behaviour = types.DoorOpen
 				elevio.SetDoorOpenLamp(true)
 				doorTimerActionCh <- timer.Start
+				elevUpdateCh <- elevator
+				sendSyncCh <- true
 			}
-			elevUpdateCh <- elevator
-			sendSyncCh <- true
 		case obstruction := <-drvObstr:
 			elevator.Obstructed = obstruction
 			doorTimerActionCh <- timer.Start
@@ -112,8 +112,8 @@ func initElevPos(elevator types.ElevState) types.ElevState {
 }
 
 // chooseAction decides what the elevator should do next
-//  - Chooses direction if we have orders in different floors
-//  - Opens door if we have orders here
+//   - Chooses direction if we have orders in different floors
+//   - Opens door if we have orders here
 func chooseAction(elevator types.ElevState,
 	doorTimerActionCh chan timer.TimerAction,
 	elevUpdateCh chan types.ElevState,
@@ -125,6 +125,7 @@ func chooseAction(elevator types.ElevState,
 	pair := ChooseDirection(elevator)
 	switch pair.Behaviour {
 	case types.Moving:
+		slog.Debug("Moving elevator", "direction", pair.Dir)
 		elevator.Dir = pair.Dir
 		elevator.Behaviour = pair.Behaviour
 		elevio.SetMotorDirection(elevator.Dir)

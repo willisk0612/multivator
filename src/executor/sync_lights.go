@@ -1,7 +1,6 @@
 package executor
 
 import (
-	"log/slog"
 	"multivator/lib/driver/elevio"
 	"multivator/src/config"
 	"multivator/src/types"
@@ -23,7 +22,6 @@ func syncHallLights(localOrders types.Orders, receivedOrders types.Orders) {
 		for floor := range localOrders[node] {
 			for btn := range localOrders[node][floor] {
 				if btn != int(types.BT_Cab) && localOrders[node][floor][btn] != receivedOrders[node][floor][btn] {
-					slog.Debug("Setting hall light", "node", node, "floor", floor, "btn", btn, "value", localOrders[node][floor][btn])
 					elevio.SetButtonLamp(types.ButtonType(btn), floor, receivedOrders[node][floor][btn])
 				}
 			}

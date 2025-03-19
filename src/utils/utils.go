@@ -1,9 +1,9 @@
 package utils
 
 import (
-	"log/slog"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 	"time"

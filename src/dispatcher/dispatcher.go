@@ -13,25 +13,26 @@ import (
 
 func Run(elevUpdateCh <-chan types.ElevState,
 	orderUpdateCh chan<- types.Orders,
-	hallOrderCh <-chan types.ButtonEvent,
-	sendSyncCh <-chan bool) {
-
-	bidTx := make(chan Message[Bid])
-	bidTxBuf := make(chan Message[Bid])
-	bidRx := make(chan Message[Bid])
-	syncTx := make(chan Message[Sync])
-	syncTxBuf := make(chan Message[Sync])
-	syncRx := make(chan Message[Sync])
+	hallOrderCh <-chan types.HallOrder,
+	sendSyncCh <-chan bool,
+) {
+	bidTxCh := make(chan Msg[Bid])
+	bidTxBufCh := make(chan Msg[Bid])
+	bidRxCh := make(chan Msg[Bid])
+	syncTxCh := make(chan Msg[Sync])
+	syncTxBufCh := make(chan Msg[Sync])
+	syncRxCh := make(chan Msg[Sync])
 	peerUpdateCh := make(chan peers.PeerUpdate)
-	var peerList peers.PeerUpdate
-	hallOrders := make(hallOrders)
 
-	go bcast.Transmitter(config.BcastPort, bidTx, syncTx)
-	go bcast.Receiver(config.BcastPort, bidRx, syncRx)
+	var peerList peers.PeerUpdate
+	hallOrders := make(BidMap)
+
+	go bcast.Transmitter(config.BcastPort, bidTxCh, syncTxCh)
+	go bcast.Receiver(config.BcastPort, bidRxCh, syncRxCh)
 	go peers.Transmitter(config.PeersPort, fmt.Sprintf("node-%d", config.NodeID), make(chan bool))
 	go peers.Receiver(config.PeersPort, peerUpdateCh)
-	go msgBufferTx(bidTxBuf, bidTx)
-	go msgBufferTx(syncTxBuf, syncTx)
+	go msgBufferTx(bidTxBufCh, bidTxCh)
+	go msgBufferTx(syncTxBufCh, syncTxCh)
 
 	elevator := <-elevUpdateCh
 
@@ -45,86 +46,84 @@ func Run(elevUpdateCh <-chan types.ElevState,
 				elevator.Orders[config.NodeID][hallOrder.Floor][hallOrder.Button] = true
 				orderUpdateCh <- elevator.Orders
 			} else {
-				// Store and transmit initial bid
 				cost := timeToServeOrder(elevator, hallOrder)
-				msg := Message[Bid]{
-					Type:      BidMsg,
-					Content:   Bid{BtnEvent: hallOrder, Cost: cost},
+				slog.Debug("Sending initial bid")
+				bidEntry := Msg[Bid]{
 					SenderID:  config.NodeID,
+					Type:      BidInitial,
+					Content:   Bid{Order: hallOrder, Cost: cost},
 					LoopCount: 0,
 				}
-				storeBid(msg, hallOrders)
-				bidTxBuf <- msg
-
+				storeBid(bidEntry, hallOrders)
+				bidTxBufCh <- bidEntry
 			}
-		case receivedBid := <-bidRx:
-			isOwnBid := receivedBid.SenderID == config.NodeID
-			switch {
-			case receivedBid.LoopCount == 0 && !isOwnBid: // Received initial bid
-				// Store own bid
-				cost := timeToServeOrder(elevator, receivedBid.Content.BtnEvent)
-				storeBid(Message[Bid]{
-					Type:     BidMsg,
-					Content:  Bid{BtnEvent: receivedBid.Content.BtnEvent, Cost: cost},
-					SenderID: config.NodeID,
-				}, hallOrders)
-				storeBid(receivedBid, hallOrders)
-
-				// Transmit own bid
-				bidTxBuf <- Message[Bid]{
-					Type:      BidMsg,
-					Content:   Bid{BtnEvent: receivedBid.Content.BtnEvent, Cost: cost},
-					SenderID:  config.NodeID,
-					LoopCount: 1,
-				}
-			case receivedBid.LoopCount == 1: // Received reply bid
-				if !isOwnBid {
-					storeBid(receivedBid, hallOrders)
-				}
-				// Check if all bids are in
-				numBids := len(hallOrders[receivedBid.Content.BtnEvent])
-				numPeers := len(peerList.Peers)
-				slog.Debug("Checking if all bids are received", "bids:", numBids, "peers:", numPeers)
-				if numBids == numPeers {
-					// Determine assignee: take order if local, otherwise set button lamp
-					assignee := findAssignee(receivedBid.Content.BtnEvent, hallOrders)
-					if assignee == config.NodeID {
-						elevator.Orders[config.NodeID][receivedBid.Content.BtnEvent.Floor][receivedBid.Content.BtnEvent.Button] = true
-						orderUpdateCh <- elevator.Orders
-					} else {
-						// If assignee cost is 0, dont set button lamp
-						if hallOrders[receivedBid.Content.BtnEvent][assignee].Cost != 0 {
-							elevator.Orders[assignee][receivedBid.Content.BtnEvent.Floor][receivedBid.Content.BtnEvent.Button] = true
-							orderUpdateCh <- elevator.Orders
-						}
-					}
-					delete(hallOrders, receivedBid.Content.BtnEvent)
-				}
-			}
-		case receivedSync := <-syncRx:
-			if receivedSync.SenderID == config.NodeID {
+		case bidRx := <-bidRxCh:
+			if bidRx.SenderID == config.NodeID {
 				continue
 			}
-			slog.Debug("Received sync from node", "nodeID", receivedSync.SenderID)
-			elevator = syncOrders(elevator, receivedSync)
-			slog.Debug("New state", "elevator", elevator)
+
+			switch bidRx.Type {
+			case BidInitial:
+				slog.Debug("Received initial bid. Sending reply bid")
+				storeBid(bidRx, hallOrders)
+				cost := timeToServeOrder(elevator, bidRx.Content.Order)
+				bidEntry := Msg[Bid]{
+					SenderID:  config.NodeID,
+					Type:      BidReply,
+					Content:   Bid{Order: bidRx.Content.Order, Cost: cost},
+					LoopCount: bidRx.LoopCount + 1,
+				}
+				storeBid(bidEntry, hallOrders)
+				bidTxBufCh <- bidEntry
+			case BidReply:
+				slog.Debug("Received reply bid")
+				storeBid(bidRx, hallOrders)
+			}
+
+			numBids := len(hallOrders[bidRx.Content.Order])
+			numPeers := len(peerList.Peers)
+			slog.Debug("Checking if all bids are received", "bids:", numBids, "peers:", numPeers)
+			if numBids == numPeers {
+				lowestCost := 100 * time.Second
+				var assignee int
+				for nodeID, bid := range hallOrders[bidRx.Content.Order] {
+					if bid < lowestCost || (bid == lowestCost && nodeID < assignee) {
+						lowestCost = bid
+						assignee = nodeID
+					}
+				}
+
+				if assignee == config.NodeID {
+					elevator.Orders[config.NodeID][bidRx.Content.Order.Floor][bidRx.Content.Order.Button] = true
+					orderUpdateCh <- elevator.Orders
+				} else if hallOrders[bidRx.Content.Order][assignee] != 0 {
+					// Cost is 0 means we dont need to set the lamp
+					elevator.Orders[assignee][bidRx.Content.Order.Floor][bidRx.Content.Order.Button] = true
+					orderUpdateCh <- elevator.Orders
+				}
+			}
+			delete(hallOrders, bidRx.Content.Order)
+
+		case syncRx := <-syncRxCh:
+			if syncRx.SenderID == config.NodeID {
+				continue
+			}
+			elevator = syncOrders(elevator, syncRx)
 			orderUpdateCh <- elevator.Orders
-			slog.Debug("lights synced")
 		case <-sendSyncCh:
-			transmitOrderSync(elevator, syncTxBuf, false)
+			transmitOrderSync(elevator, syncTxBufCh, false)
 		case update := <-peerUpdateCh:
 			peerList.Peers = update.Peers
-			slog.Info("Peer update", "peerUpdate", update)
 			// If a node different from our own connects, sync state with restoring cab orders.
 			if update.New != fmt.Sprintf("node-%d", config.NodeID) && update.New != "" {
-				transmitOrderSync(elevator, syncTxBuf, true)
+				transmitOrderSync(elevator, syncTxBufCh, true)
 			}
 		}
 	}
 }
 
 // msgBufferTx listens for messages, and sends a burst of messages at a fixed interval
-func msgBufferTx[T MsgContent](msgBufCh chan Message[T], msgTxCh chan Message[T]) {
+func msgBufferTx[T MsgContent](msgBufCh chan Msg[T], msgTxCh chan Msg[T]) {
 	for msg := range msgBufCh {
 		for range config.MsgRepetitions {
 			msgTxCh <- msg
@@ -133,28 +132,11 @@ func msgBufferTx[T MsgContent](msgBufCh chan Message[T], msgTxCh chan Message[T]
 	}
 }
 
-func findAssignee(event types.ButtonEvent, hallOrders hallOrders) int {
-	slog.Debug("Entered findAssignee")
-	lowestCost := 24 * time.Hour
-	assignee := 0 // Default to node 0
-
-	for nodeID, bid := range hallOrders[event] {
-		if bid.Cost < lowestCost || (bid.Cost == lowestCost && nodeID < assignee) {
-			lowestCost = bid.Cost
-			assignee = nodeID
-		}
+func storeBid(msg Msg[Bid], hallOrders BidMap) {
+	slog.Debug("Trying to store bid", "order", msg.Content.Order, "cost", msg.Content.Cost)
+	if hallOrders[msg.Content.Order] == nil {
+		hallOrders[msg.Content.Order] = make(map[int]time.Duration)
 	}
 
-	slog.Debug("Assigning order to", "nodeID", assignee, "cost", lowestCost, "All bids", hallOrders[event])
-	return assignee
-}
-
-func storeBid(msg Message[Bid], hallOrders hallOrders) {
-	if hallOrders[msg.Content.BtnEvent] == nil {
-		hallOrders[msg.Content.BtnEvent] = make(map[int]Bid)
-	}
-	hallOrders[msg.Content.BtnEvent][msg.SenderID] = Bid{
-		Cost:     msg.Content.Cost,
-		BtnEvent: msg.Content.BtnEvent,
-	}
+	hallOrders[msg.Content.Order][msg.SenderID] = msg.Content.Cost
 }

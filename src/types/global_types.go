@@ -3,11 +3,11 @@ package types
 import "multivator/src/config"
 
 type ElevState struct {
-	Floor           int
-	Orders          Orders
-	Dir             MotorDirection
-	Behaviour       ElevBehaviour
-	Obstructed      bool
+	Floor      int
+	Orders     Orders
+	Dir        MotorDirection
+	Behaviour  ElevBehaviour
+	Obstructed bool
 }
 
 type Orders [config.NumElevators][config.NumFloors][config.NumButtons]bool
@@ -23,14 +23,26 @@ const (
 type ButtonType int
 
 const (
-	BT_HallUp   ButtonType = 0
-	BT_HallDown ButtonType = 1
-	BT_Cab      ButtonType = 2
+	BT_HallUp ButtonType = iota
+	BT_HallDown
+	BT_Cab
 )
 
 type ButtonEvent struct {
 	Floor  int
 	Button ButtonType
+}
+
+type HallType int
+
+const (
+	HallUp HallType = iota
+	HallDown
+)
+
+type HallOrder struct {
+	Floor  int
+	Button HallType
 }
 
 type ElevBehaviour int

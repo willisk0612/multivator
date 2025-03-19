@@ -17,11 +17,11 @@ func main() {
 	utils.InitLogger()
 
 	elevUpdateCh := make(chan types.ElevState)
-	hallOrderCh := make(chan types.ButtonEvent)
+	hallOrderCh := make(chan types.HallOrder)
 	sendSyncCh := make(chan bool)
 	orderUpdateCh := make(chan types.Orders)
 
 	go dispatcher.Run(elevUpdateCh, orderUpdateCh, hallOrderCh, sendSyncCh)
 	go executor.Run(elevUpdateCh, orderUpdateCh, hallOrderCh, sendSyncCh)
-	select{}
+	select {}
 }
