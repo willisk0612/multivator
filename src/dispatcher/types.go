@@ -35,3 +35,6 @@ type Sync struct {
 }
 
 type BidMap map[types.HallOrder]map[int]time.Duration
+
+// BidBook is a map of all bids received from peers
+type BidBook map[int]int // [id][assignee]

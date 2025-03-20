@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"strconv"
 
 	"multivator/src/config"
 	"multivator/src/types"
@@ -56,4 +57,16 @@ func FormatBtnEvent(btnEvent types.ButtonEvent) string {
 		return fmt.Sprintf("Cab(%d)", btnEvent.Floor)
 	}
 	return "Unknown"
+}
+
+func FindLowestID(nodes []string) int {
+	minID := len(nodes)
+	for _, node := range nodes {
+		nodeInt, _ := strconv.Atoi(node[5:])
+		if nodeInt < minID {
+			minID = nodeInt
+		}
+	}
+
+	return minID
 }
