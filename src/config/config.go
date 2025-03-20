@@ -8,7 +8,7 @@ import (
 var NodeID int
 
 const (
-	LogLevel         = slog.LevelDebug
+	LogLevel         = slog.LevelInfo
 	NumElevators     = 2
 	NumFloors        = 4
 	NumButtons       = 3

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"multivator/lib/network/bcast"
@@ -21,21 +22,28 @@ func Run(elevUpdateCh <-chan types.ElevState,
 	bidTxCh := make(chan Msg[Bid])
 	bidTxBufCh := make(chan Msg[Bid])
 	bidRxCh := make(chan Msg[Bid])
+	bidRxBufCh := make(chan Msg[Bid])
 	syncTxCh := make(chan Msg[Sync])
 	syncTxBufCh := make(chan Msg[Sync])
 	syncRxCh := make(chan Msg[Sync])
+	syncRxBufCh := make(chan Msg[Sync])
 	peerUpdateCh := make(chan peers.PeerUpdate)
 
 	var peerList peers.PeerUpdate
 	var prevPeerList peers.PeerUpdate
+	var atomicCounter atomic.Uint64
+
 	bidMap := make(BidMap)
 
 	go bcast.Transmitter(config.BcastPort, bidTxCh, syncTxCh)
 	go bcast.Receiver(config.BcastPort, bidRxCh, syncRxCh)
 	go peers.Transmitter(config.PeersPort, fmt.Sprintf("node-%d", config.NodeID), make(chan bool))
 	go peers.Receiver(config.PeersPort, peerUpdateCh)
-	go msgBufferTx(bidTxBufCh, bidTxCh)
-	go msgBufferTx(syncTxBufCh, syncTxCh)
+
+	go msgBufferTx(bidTxBufCh, bidTxCh, &atomicCounter)
+	go msgBufferTx(syncTxBufCh, syncTxCh, &atomicCounter)
+	go msgBufferRx(bidRxBufCh, bidRxCh, &atomicCounter)
+	go msgBufferRx(syncRxBufCh, syncRxCh, &atomicCounter)
 
 	elevator := <-elevUpdateCh
 
@@ -53,11 +61,8 @@ func Run(elevUpdateCh <-chan types.ElevState,
 				orderUpdateCh,
 				bidTxBufCh,
 			)
-		case bidRx := <-bidRxCh:
-			if bidRx.SenderID == config.NodeID {
-				continue
-			}
 
+		case bidRx := <-bidRxBufCh:
 			switch bidRx.Type {
 			case BidInitial:
 				slog.Debug("Received initial bid. Sending reply bid")
@@ -74,9 +79,6 @@ func Run(elevUpdateCh <-chan types.ElevState,
 				slog.Debug("Received reply bid")
 				storeBid(bidRx, bidMap)
 			}
-
-			// Check timer
-			// If the timer has expired, we have to broadcast a ping
 
 			numBids := len(bidMap[bidRx.Content.Order])
 			numPeers := len(peerList.Peers)
@@ -102,102 +104,68 @@ func Run(elevUpdateCh <-chan types.ElevState,
 			}
 			delete(bidMap, bidRx.Content.Order)
 
-		case syncRx := <-syncRxCh:
-			if syncRx.SenderID == config.NodeID {
-				continue
-			}
+		case syncRx := <-syncRxBufCh:
 			elevator = syncOrders(elevator, syncRx)
 			orderUpdateCh <- elevator.Orders
 
 		case <-sendSyncCh:
-			transmitOrderSync(elevator, syncTxBufCh, false)
+			syncTxBufCh <- Msg[Sync]{
+				Type:     SyncMsg,
+				Content:  Sync{Orders: elevator.Orders, RestoreCabOrders: false},
+				SenderID: config.NodeID,
+			}
 
 		case update := <-peerUpdateCh:
 			slog.Debug("Peer update", "update", update)
 			peerList.Peers = update.Peers
 			// If a node different from our own connects, sync state with restoring cab orders.
 			if update.New != fmt.Sprintf("node-%d", config.NodeID) && update.New != "" {
-				transmitOrderSync(elevator, syncTxBufCh, true)
-			}
+				syncTxBufCh <- Msg[Sync]{
+					Type:     SyncMsg,
+					Content:  Sync{Orders: elevator.Orders, RestoreCabOrders: true},
+					SenderID: config.NodeID,
+				}
 
-			// If a node goes from connected to disconnected, check if it had any hall orders
-			// If so, start a bidding process for each active hall order
-			slog.Debug("Previous peers", "prevPeerList", prevPeerList, "update", update)
-			for _, lostPeer := range update.Lost {
-				for _, peer := range prevPeerList.Peers {
-					slog.Debug("Checking lost peer", "peer", peer, "lostPeer", lostPeer)
-					if peer == lostPeer {
-						peerInt, _ := strconv.Atoi(peer[5:])
-						minID := utils.FindLowestID(update.Peers)
-						for floor := range elevator.Orders[peerInt] {
-							for btn := range elevator.Orders[peerInt][floor] {
-								if btn != int(types.BT_Cab) &&
-									elevator.Orders[peerInt][floor][btn] &&
-									config.NodeID == minID {
-									slog.Debug("Starting bidding process for lost order", "floor", floor, "btn", btn)
-									hallOrder := types.HallOrder{Floor: floor, Button: types.HallType(btn)}
-									elevator = handleHallOrder(
-										elevator,
-										hallOrder,
-										bidMap,
-										peerList,
-										orderUpdateCh,
-										bidTxBufCh,
-									)
+				// If a node goes from PeerUpdate.Peers to PeerUpdate.Lost, we overtake active hall orders
+				// Lowest node id initiates the bidding process
+				for _, lostPeer := range update.Lost {
+					for _, peer := range prevPeerList.Peers {
+						slog.Debug("Checking lost peer", "peer", peer, "lostPeer", lostPeer)
+						if peer == lostPeer {
+							peerInt, _ := strconv.Atoi(peer[5:])
+							minID := utils.FindLowestID(update.Peers)
+							for floor := range elevator.Orders[peerInt] {
+								for btn := range elevator.Orders[peerInt][floor] {
+									if btn != int(types.BT_Cab) &&
+										elevator.Orders[peerInt][floor][btn] &&
+										config.NodeID == minID {
+										slog.Debug("Starting bidding process for lost order", "floor", floor, "btn", btn)
+										hallOrder := types.HallOrder{Floor: floor, Button: types.HallType(btn)}
+										elevator = handleHallOrder(
+											elevator,
+											hallOrder,
+											bidMap,
+											peerList,
+											orderUpdateCh,
+											bidTxBufCh,
+										)
+									}
 								}
 							}
 						}
 					}
 				}
+				prevPeerList = peerList
 			}
-			prevPeerList = peerList
 		}
 	}
 }
 
-// msgBufferTx listens for messages, and sends a burst of messages at a fixed interval
-func msgBufferTx[T MsgContent](msgBufCh chan Msg[T], msgTxCh chan Msg[T]) {
-	for msg := range msgBufCh {
-		for range config.MsgRepetitions {
-			msgTxCh <- msg
-			time.Sleep(config.MsgInterval)
-		}
-	}
-}
-
-func storeBid(msg Msg[Bid], hallOrders BidMap) {
+func storeBid(msg Msg[Bid], bidMap BidMap) {
 	slog.Debug("Trying to store bid", "order", msg.Content.Order, "cost", msg.Content.Cost)
-	if hallOrders[msg.Content.Order] == nil {
-		hallOrders[msg.Content.Order] = make(map[int]time.Duration)
+	if bidMap[msg.Content.Order] == nil {
+		bidMap[msg.Content.Order] = make(map[int]time.Duration)
 	}
 
-	hallOrders[msg.Content.Order][msg.SenderID] = msg.Content.Cost
-}
-
-func handleHallOrder(
-	elevator types.ElevState,
-	hallOrder types.HallOrder,
-	hallOrders BidMap,
-	peerList peers.PeerUpdate,
-	orderUpdateCh chan<- types.Orders,
-	bidTxBufCh chan<- Msg[Bid],
-) types.ElevState {
-	// If we are alone, send order back
-	slog.Debug("Received hall order. Checking if we are alone", "peers", peerList.Peers)
-	if len(peerList.Peers) < 2 {
-		elevator.Orders[config.NodeID][hallOrder.Floor][hallOrder.Button] = true
-		orderUpdateCh <- elevator.Orders
-	} else {
-		// Start timer
-		cost := timeToServeOrder(elevator, hallOrder)
-		slog.Debug("Sending initial bid")
-		bidEntry := Msg[Bid]{
-			SenderID: config.NodeID,
-			Type:     BidInitial,
-			Content:  Bid{Order: hallOrder, Cost: cost},
-		}
-		storeBid(bidEntry, hallOrders)
-		bidTxBufCh <- bidEntry
-	}
-	return elevator
+	bidMap[msg.Content.Order][msg.SenderID] = msg.Content.Cost
 }

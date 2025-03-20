@@ -15,9 +15,10 @@ const (
 )
 
 type Msg[Content MsgContent] struct {
-	SenderID  int
-	Type      MsgType
-	Content   Content
+	SenderID int
+	Type     MsgType
+	Content  Content
+	Counter  uint64
 }
 
 type MsgContent interface {
