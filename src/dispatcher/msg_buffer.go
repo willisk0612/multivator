@@ -1,6 +1,8 @@
 package dispatcher
 
 import (
+	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -8,11 +10,10 @@ import (
 )
 
 // msgBufferTx sends a burst of messages to bcast.Transmitter
-//  - implements lamport timestamp for outgoing messages
+//   - increments monotonic counter for each input message
 func msgBufferTx[T MsgContent](msgBufTxCh chan Msg[T], msgTxCh chan Msg[T], atomicCounter *atomic.Uint64) {
 	for msgBufTx := range msgBufTxCh {
-		atomicCounter.Add(1)
-		msgBufTx.Counter = atomicCounter.Load()
+		msgBufTx.Counter = atomicCounter.Add(1)
 		for range config.MsgRepetitions {
 			msgTxCh <- msgBufTx
 			time.Sleep(config.MsgInterval)
@@ -21,17 +22,42 @@ func msgBufferTx[T MsgContent](msgBufTxCh chan Msg[T], msgTxCh chan Msg[T], atom
 }
 
 // msgBufferRx receives a burst of messages from bcast.Receiver
-//  - ignores own messages
-//  - implements lamport timestamp for incoming messages
+//   - ignores own messages
+//   - implements lamport timestamp for incoming messages
+//   - stores seen messages in a map of size 10 to avoid duplicates
 func msgBufferRx[T MsgContent](msgBufRxCh chan Msg[T], msgRxCh chan Msg[T], atomicCounter *atomic.Uint64) {
+	var seenMsgs sync.Map
+	recentMsgIDs := make([]string, 10)
+	var nextIndex atomic.Uint32
+
 	for msgRx := range msgRxCh {
 		if msgRx.SenderID != config.NodeID {
-			localCounter := atomicCounter.Load()
-			if msgRx.Counter > localCounter {
-				atomicCounter.Store(msgRx.Counter)
+			msgID := fmt.Sprintf("%d-%d", msgRx.SenderID, msgRx.Counter)
+
+			if _, seen := seenMsgs.LoadOrStore(msgID, true); !seen {
+				for {
+					localTime := atomicCounter.Load()
+					newTime := max(localTime, msgRx.Counter) + 1
+					if atomicCounter.CompareAndSwap(localTime, newTime) {
+						break
+					}
+				}
+
+				index := int((nextIndex.Add(1) - 1) % 10)
+				oldMsgID := recentMsgIDs[index]
+				if oldMsgID != "" {
+					seenMsgs.Delete(oldMsgID)
+				}
+				recentMsgIDs[index] = msgID
+				msgBufRxCh <- msgRx
 			}
-			atomicCounter.Add(1)
-			msgBufRxCh <- msgRx
 		}
 	}
+}
+
+func max(a, b uint64) uint64 {
+	if a > b {
+		return a
+	}
+	return b
 }

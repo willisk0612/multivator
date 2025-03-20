@@ -8,7 +8,7 @@ import (
 var NodeID int
 
 const (
-	LogLevel         = slog.LevelInfo
+	LogLevel         = slog.LevelDebug
 	NumElevators     = 2
 	NumFloors        = 4
 	NumButtons       = 3
@@ -16,7 +16,7 @@ const (
 	DoorOpenDuration = 3 * time.Second
 	TravelDuration   = 2 * time.Second
 	DirChangePenalty = 2 * time.Second
-	MsgRepetitions   = 1
+	MsgRepetitions   = 10
 	MsgInterval      = 10 * time.Millisecond
 	MaxLoopCount     = 10
 	BcastPort        = 15657
