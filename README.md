@@ -36,16 +36,3 @@ The system uses a peer to peer topology. It utilizes UDP broadcasting, with the 
   - Orders are stored in a nested array in the ```ElevState``` struct in ```src/types/elev_types.go```. It stores all the cab/hall orders for all the elevators in the system.
   - On hall arrivals, hall and cab orders are synchronized. Cab orders are restored from the network upon reconnection.
 
-### Design choices
-
-  - Focus on best practices for the Go language.
-  - Event driven concurrency system with channels and goroutines.
-  - Seperation between elevator control and network communication.
-
-
-## TODO
-
-  1. Expand ```types.Sync``` to be sent at a regular heartbeat interval. Use a monotonic counter to update states between nodes.
-  2. Implement a timeout mechanism if all bids are not received.
-  3. Reassigning hall orders in case of failures.
-
