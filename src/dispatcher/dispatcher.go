@@ -52,7 +52,6 @@ func Run(elevUpdateCh <-chan types.ElevState,
 					SenderID:  config.NodeID,
 					Type:      BidInitial,
 					Content:   Bid{Order: hallOrder, Cost: cost},
-					LoopCount: 0,
 				}
 				storeBid(bidEntry, hallOrders)
 				bidTxBufCh <- bidEntry
@@ -71,7 +70,6 @@ func Run(elevUpdateCh <-chan types.ElevState,
 					SenderID:  config.NodeID,
 					Type:      BidReply,
 					Content:   Bid{Order: bidRx.Content.Order, Cost: cost},
-					LoopCount: bidRx.LoopCount + 1,
 				}
 				storeBid(bidEntry, hallOrders)
 				bidTxBufCh <- bidEntry

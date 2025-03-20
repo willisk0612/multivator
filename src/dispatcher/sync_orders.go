@@ -12,7 +12,6 @@ func transmitOrderSync(elevator types.ElevState, txBuf chan Msg[Sync], restoreCa
 	slog.Debug("Entered transmitOrderSync")
 	txBuf <- Msg[Sync]{
 		Type:      SyncMsg,
-		LoopCount: 0,
 		Content:   Sync{Orders: elevator.Orders, RestoreCabOrders: restoreCabOrders},
 		SenderID:  config.NodeID,
 	}

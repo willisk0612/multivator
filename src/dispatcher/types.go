@@ -18,7 +18,6 @@ type Msg[Content MsgContent] struct {
 	SenderID  int
 	Type      MsgType
 	Content   Content
-	LoopCount uint
 }
 
 type MsgContent interface {
