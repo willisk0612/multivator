@@ -65,15 +65,12 @@ func Run(elevUpdateCh chan types.ElevState,
 				hallOrderCh <- types.HallOrder{Floor: btn.Floor, Button: types.HallType(btn.Button)}
 			}
 		case floor := <-drvFloors:
-			slog.Debug("Updating floor", "floor", floor)
 			elevator.Floor = floor
-			slog.Debug("Elevator state after floor update", "elevator", elevator)
 			elevio.SetFloorIndicator(floor)
 
 			if ShouldStopHere(elevator) {
 				elevio.SetMotorDirection(types.MD_Stop)
 				elevator = clearAtCurrentFloor(elevator)
-				elevator.Dir = types.MD_Stop
 				elevator.Behaviour = types.DoorOpen
 				elevio.SetDoorOpenLamp(true)
 				doorTimerActionCh <- timer.Start

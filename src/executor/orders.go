@@ -104,8 +104,9 @@ func ChooseDirection(elevator types.ElevState) types.DirnBehaviourPair {
 		default:
 			return types.DirnBehaviourPair{Dir: types.MD_Stop, Behaviour: types.Idle}
 		}
+	default:
+		return types.DirnBehaviourPair{Dir: types.MD_Stop, Behaviour: types.Idle}
 	}
-	return types.DirnBehaviourPair{Dir: types.MD_Stop, Behaviour: types.Idle}
 }
 
 func countOrders(elevator types.ElevState, startFloor int, endFloor int) (result int) {
