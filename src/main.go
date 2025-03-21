@@ -19,7 +19,7 @@ func main() {
 	elevUpdateCh := make(chan types.ElevState)
 	hallOrderCh := make(chan types.HallOrder)
 	sendSyncCh := make(chan bool)
-	orderUpdateCh := make(chan types.Orders)
+	orderUpdateCh := make(chan types.Orders, config.NumElevators)
 
 	go dispatcher.Run(elevUpdateCh, orderUpdateCh, hallOrderCh, sendSyncCh)
 	go executor.Run(elevUpdateCh, orderUpdateCh, hallOrderCh, sendSyncCh)
