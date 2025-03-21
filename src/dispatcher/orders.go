@@ -2,6 +2,7 @@ package dispatcher
 
 import (
 	"log/slog"
+	"time"
 
 	"multivator/lib/network/peers"
 
@@ -19,24 +20,35 @@ func handleHallOrder(
 	peerList peers.PeerUpdate,
 	orderUpdateCh chan<- types.Orders,
 	bidTxBufCh chan<- Msg[Bid],
+	bidTimeoutCh chan<- types.HallOrder,
 ) types.ElevState {
-	// If we are alone, send order back
 	slog.Debug("Received hall order. Checking if we are alone", "peers", peerList.Peers)
 	if len(peerList.Peers) < 2 {
 		elevator.Orders[config.NodeID][hallOrder.Floor][hallOrder.Button] = true
 		orderUpdateCh <- elevator.Orders
-	} else {
-		// Start timer
-		cost := timeToServeOrder(elevator, hallOrder)
-		slog.Debug("Sending initial bid")
-		bidEntry := Msg[Bid]{
-			SenderID: config.NodeID,
-			Type:     BidInitial,
-			Content:  Bid{Order: hallOrder, Cost: cost},
-		}
-		storeBid(bidEntry, bidMap)
-		bidTxBufCh <- bidEntry
+		return elevator
 	}
+
+	// Start timeout timer for the bid
+	timer := time.AfterFunc(config.BidTimeout, func() {
+		bidTimeoutCh <- hallOrder
+	})
+
+	cost := timeToServeOrder(elevator, hallOrder)
+	bidEntry := Msg[Bid]{
+		SenderID: config.NodeID,
+		Type:     BidInitial,
+		Content:  Bid{Order: hallOrder, Cost: cost},
+	}
+	storeBid(bidEntry, bidMap)
+	// Attach the timer and timeout channel to the bid entry
+	// Maps are reference types, so we can update it here directly
+	entry := bidMap[hallOrder]
+	entry.Timer = timer
+	bidMap[hallOrder] = entry
+
+	bidTxBufCh <- bidEntry
+
 	return elevator
 }
 

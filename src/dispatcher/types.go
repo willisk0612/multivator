@@ -35,7 +35,9 @@ type Sync struct {
 	RestoreCabOrders bool
 }
 
-type BidMap map[types.HallOrder]map[int]time.Duration
+type BidMapValues struct {
+	Costs map[int]time.Duration
+	Timer *time.Timer
+}
 
-// BidBook is a map of all bids received from peers
-type BidBook map[int]int // [id][assignee]
+type BidMap map[types.HallOrder]BidMapValues

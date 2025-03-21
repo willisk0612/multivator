@@ -11,6 +11,7 @@ const (
 	LogLevel         = slog.LevelDebug
 	MsgRepetitions   = 5
 	MsgInterval      = 10 * time.Millisecond
+	BidTimeout       = 1 * time.Second
 	NumElevators     = 3
 	NumFloors        = 4
 	NumButtons       = 3

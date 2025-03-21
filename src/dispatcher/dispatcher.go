@@ -28,6 +28,7 @@ func Run(elevUpdateCh <-chan types.ElevState,
 	syncRxCh := make(chan Msg[Sync])
 	syncRxBufCh := make(chan Msg[Sync])
 	peerUpdateCh := make(chan peers.PeerUpdate)
+	bidTimeoutCh := make(chan types.HallOrder)
 
 	bidMap := make(BidMap)
 
@@ -60,6 +61,7 @@ func Run(elevUpdateCh <-chan types.ElevState,
 				peerList,
 				orderUpdateCh,
 				bidTxBufCh,
+				bidTimeoutCh,
 			)
 
 		case bidRx := <-bidRxBufCh:
@@ -80,15 +82,20 @@ func Run(elevUpdateCh <-chan types.ElevState,
 				storeBid(bidRx, bidMap)
 			}
 
-			numBids := len(bidMap[bidRx.Content.Order])
+			numBids := len(bidMap[bidRx.Content.Order].Costs)
 			numPeers := len(peerList.Peers)
 			slog.Debug("Checking if all bids are received", "bids:", numBids, "peers:", numPeers)
 			if numBids == numPeers {
+				bidEntry := bidMap[bidRx.Content.Order]
+				if bidEntry.Timer != nil {
+					bidEntry.Timer.Stop()
+				}
+
 				lowestCost := 100 * time.Second
 				var assignee int
-				for nodeID, bid := range bidMap[bidRx.Content.Order] {
-					if bid < lowestCost || (bid == lowestCost && nodeID < assignee) {
-						lowestCost = bid
+				for nodeID, cost := range bidEntry.Costs {
+					if cost < lowestCost || (cost == lowestCost && nodeID < assignee) {
+						lowestCost = cost
 						assignee = nodeID
 					}
 				}
@@ -96,7 +103,7 @@ func Run(elevUpdateCh <-chan types.ElevState,
 				if assignee == config.NodeID {
 					elevator.Orders[config.NodeID][bidRx.Content.Order.Floor][bidRx.Content.Order.Button] = true
 					orderUpdateCh <- elevator.Orders
-				} else if bidMap[bidRx.Content.Order][assignee] != 0 {
+				} else if bidEntry.Costs[assignee] != 0 {
 					elevator.Orders[assignee][bidRx.Content.Order.Floor][bidRx.Content.Order.Button] = true
 					orderUpdateCh <- elevator.Orders
 				}
@@ -112,6 +119,16 @@ func Run(elevUpdateCh <-chan types.ElevState,
 				Type:     SyncMsg,
 				Content:  Sync{Orders: elevator.Orders, RestoreCabOrders: false},
 				SenderID: config.NodeID,
+			}
+
+		case order := <-bidTimeoutCh:
+			if entry, exists := bidMap[order]; exists {
+				elevator.Orders[config.NodeID][order.Floor][order.Button] = true
+				orderUpdateCh <- elevator.Orders
+				if entry.Timer != nil {
+					entry.Timer.Stop()
+				}
+				delete(bidMap, order)
 			}
 
 		case update := <-peerUpdateCh:
@@ -147,6 +164,7 @@ func Run(elevUpdateCh <-chan types.ElevState,
 											peerList,
 											orderUpdateCh,
 											bidTxBufCh,
+											bidTimeoutCh,
 										)
 									}
 								}
@@ -161,10 +179,17 @@ func Run(elevUpdateCh <-chan types.ElevState,
 }
 
 func storeBid(msg Msg[Bid], bidMap BidMap) {
-	slog.Debug("Trying to store bid", "order", msg.Content.Order, "cost", msg.Content.Cost)
-	if bidMap[msg.Content.Order] == nil {
-		bidMap[msg.Content.Order] = make(map[int]time.Duration)
+	order := msg.Content.Order
+	cost := msg.Content.Cost
+
+	entry, exists := bidMap[order]
+	if !exists {
+		entry = BidMapValues{
+			Costs: make(map[int]time.Duration),
+			Timer: nil,
+		}
 	}
 
-	bidMap[msg.Content.Order][msg.SenderID] = msg.Content.Cost
+	entry.Costs[msg.SenderID] = cost
+	bidMap[order] = entry
 }
