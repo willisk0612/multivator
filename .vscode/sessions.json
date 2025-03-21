@@ -1,6 +1,6 @@
 {
     "theme": "tribe",
-    "active": "3-multivator",
+    "active": "default",
     "activateOnStartup": true,
     "keepExistingTerminals": false,
     "sessions": {

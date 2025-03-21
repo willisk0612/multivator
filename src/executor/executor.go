@@ -7,7 +7,6 @@ import (
 
 	"multivator/lib/driver/elevio"
 	"multivator/src/config"
-	"multivator/src/timer"
 	"multivator/src/types"
 	"multivator/src/utils"
 )
@@ -20,9 +19,8 @@ func Run(elevUpdateCh chan types.ElevState,
 	drvButtonsCh := make(chan types.ButtonEvent)
 	drvFloorsCh := make(chan int)
 	drvObstrCh := make(chan bool)
-	doorTimerTimeoutCh := make(chan bool)
-	doorTimerActionCh := make(chan timer.TimerAction)
-	doorTimerDuration := time.NewTimer(config.DoorOpenDuration)
+	doorTimeoutCh := make(chan bool)
+	var doorTimer *time.Timer
 	port := 15657 + config.NodeID
 	elevio.Init(fmt.Sprintf("localhost:%d", port), config.NumFloors)
 
@@ -34,7 +32,6 @@ func Run(elevUpdateCh chan types.ElevState,
 	slog.Debug("Initializing position")
 	elevator = initElevPos(elevator)
 
-	go timer.Run(doorTimerDuration, doorTimerTimeoutCh, doorTimerActionCh)
 	go elevio.PollButtons(drvButtonsCh)
 	go elevio.PollFloorSensor(drvFloorsCh)
 	go elevio.PollObstructionSwitch(drvObstrCh)
@@ -52,14 +49,14 @@ func Run(elevUpdateCh chan types.ElevState,
 			syncHallLights(elevator.Orders, orderUpdate)
 			syncCabLights(elevator.Orders, orderUpdate)
 			elevator.Orders = orderUpdate
-			elevator = chooseAction(elevator, doorTimerActionCh, elevUpdateCh)
+			elevator = chooseAction(elevator, doorTimer, elevUpdateCh)
 
 		case btn := <-drvButtonsCh:
 			slog.Debug("Button press received", "button", utils.FormatBtnEvent(btn))
 			if btn.Button == types.BT_Cab {
 				elevator.Orders[config.NodeID][btn.Floor][btn.Button] = true
 				elevio.SetButtonLamp(types.BT_Cab, btn.Floor, true)
-				elevator = chooseAction(elevator, doorTimerActionCh, elevUpdateCh)
+				elevator = chooseAction(elevator, doorTimer, elevUpdateCh)
 				elevUpdateCh <- elevator
 				sendSyncCh <- true
 			} else {
@@ -76,23 +73,25 @@ func Run(elevUpdateCh chan types.ElevState,
 				elevator = clearAtCurrentFloor(elevator)
 				elevator.Behaviour = types.DoorOpen
 				elevio.SetDoorOpenLamp(true)
-				doorTimerActionCh <- timer.Start
+				doorTimer = time.AfterFunc(config.DoorOpenDuration, func() {
+					doorTimeoutCh <- true
+				})
 				elevUpdateCh <- elevator
 				sendSyncCh <- true
 			}
 
 		case obstruction := <-drvObstrCh:
 			elevator.Obstructed = obstruction
-			doorTimerActionCh <- timer.Start
+			doorTimer.Reset(config.DoorOpenDuration)
 
-		case <-doorTimerTimeoutCh:
+		case <-doorTimeoutCh:
 			if elevator.Obstructed {
-				doorTimerActionCh <- timer.Start
+				doorTimer.Reset(config.DoorOpenDuration)
 				continue
 			}
 			elevio.SetDoorOpenLamp(false)
 			elevator.Behaviour = types.Idle
-			elevator = chooseAction(elevator, doorTimerActionCh, elevUpdateCh)
+			elevator = chooseAction(elevator, doorTimer, elevUpdateCh)
 			elevUpdateCh <- elevator
 			sendSyncCh <- true
 		}
@@ -117,7 +116,7 @@ func initElevPos(elevator types.ElevState) types.ElevState {
 //   - Chooses direction if we have orders in different floors
 //   - Opens door if we have orders here
 func chooseAction(elevator types.ElevState,
-	doorTimerActionCh chan timer.TimerAction,
+	doorTimer *time.Timer,
 	elevUpdateCh chan types.ElevState,
 ) types.ElevState {
 	if elevator.Behaviour != types.Idle {
@@ -136,7 +135,7 @@ func chooseAction(elevator types.ElevState,
 		elevator.Behaviour = types.DoorOpen
 		elevio.SetDoorOpenLamp(true)
 		elevator = clearAtCurrentFloor(elevator)
-		doorTimerActionCh <- timer.Start
+		doorTimer.Reset(config.DoorOpenDuration)
 		elevUpdateCh <- elevator
 	default:
 		elevator.Behaviour = types.Idle
