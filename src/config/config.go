@@ -9,16 +9,15 @@ var NodeID int
 
 const (
 	LogLevel         = slog.LevelDebug
-	NumElevators     = 2
+	MsgRepetitions   = 5
+	MsgInterval      = 10 * time.Millisecond
+	NumElevators     = 3
 	NumFloors        = 4
 	NumButtons       = 3
 	SensorPollRate   = 25 * time.Millisecond
 	DoorOpenDuration = 3 * time.Second
 	TravelDuration   = 2 * time.Second
 	DirChangePenalty = 2 * time.Second
-	MsgRepetitions   = 10
-	MsgInterval      = 10 * time.Millisecond
-	MaxLoopCount     = 10
 	BcastPort        = 15657
 	PeersPort        = 15658
 )

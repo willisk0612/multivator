@@ -1,6 +1,6 @@
 {
     "theme": "tribe",
-    "active": "default",
+    "active": "3-multivator",
     "activateOnStartup": true,
     "keepExistingTerminals": false,
     "sessions": {
@@ -22,113 +22,23 @@
                 ]
             }
         ],
-        "elev 1": [
-            [
-                {
-                    "name": "Simulator 1",
-                    "autoExecuteCommands": true,
-                    "commands": [
-                        "cd lib/simulator && ./SimElevatorServer.exe"
-                    ]
-                },
-                {
-                    "name": "main 1",
-                    "autoExecuteCommands": true,
-                    "commands": [
-                        "go run src/main.go --id 0"
-                    ]
-                }
-            ]
+        "3-multivator": [
+            {
+                "name": "3-multivator",
+                "autoExecuteCommands": true,
+                "commands": [
+                    "./lib/simulator/3-multivator.bat"
+                ]
+            }
         ],
-        "elev 2": [
-            [
-                {
-                    "name": "Simulator 2",
-                    "autoExecuteCommands": true,
-                    "commands": [
-                        "cd lib/simulator && ./SimElevatorServer.exe --port 15658"
-                    ]
-                },
-                {
-                    "name": "main 2",
-                    "autoExecuteCommands": true,
-                    "commands": [
-                        "go run src/main.go --id 1"
-                    ]
-                }
-            ]
-        ],
-        "elev 3": [
-            [
-                {
-                    "name": "Simulator 3",
-                    "autoExecuteCommands": true,
-                    "commands": [
-                        "cd lib/simulator && ./SimElevatorServer.exe --port 15659"
-                    ]
-                },
-                {
-                    "name": "main 3",
-                    "autoExecuteCommands": true,
-                    "commands": [
-                        "go run src/main.go --id 2"
-                    ]
-                }
-            ]
-        ],
-        "elev 1 race": [
-            [
-                {
-                    "name": "Simulator 1",
-                    "autoExecuteCommands": true,
-                    "commands": [
-                        "cd lib/simulator && ./SimElevatorServer.exe"
-                    ]
-                },
-                {
-                    "name": "main 1 race",
-                    "autoExecuteCommands": true,
-                    "commands": [
-                        "go run -race src/main.go --id 0"
-                    ]
-                }
-            ]
-        ],
-        "elev 2 race": [
-            [
-                {
-                    "name": "Simulator 2",
-                    "autoExecuteCommands": true,
-                    "commands": [
-                        "cd lib/simulator && ./SimElevatorServer.exe --port 15658"
-                    ]
-                },
-                {
-                    "name": "main 2 race",
-                    "autoExecuteCommands": true,
-                    "commands": [
-                        "go run -race src/main.go --id 1"
-                    ]
-                }
-            ]
-        ],
-        "elev 3 race": [
-            [
-                {
-                    "name": "Simulator 3",
-                    "autoExecuteCommands": true,
-                    "commands": [
-                        "cd lib/simulator && ./SimElevatorServer.exe --port 15659"
-                    ]
-                },
-                {
-                    "name": "main 3 race",
-                    "autoExecuteCommands": true,
-                    "commands": [
-                        "go run -race src/main.go --id 2"
-                    ]
-                }
-            ]
+        "3-multivator race": [
+            {
+                "name": "3-multivator",
+                "autoExecuteCommands": true,
+                "commands": [
+                    "./lib/simulator/3-multivator-race.bat"
+                ]
+            }
         ]
     }
 }

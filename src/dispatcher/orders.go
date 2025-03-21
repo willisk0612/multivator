@@ -2,6 +2,7 @@ package dispatcher
 
 import (
 	"log/slog"
+
 	"multivator/lib/network/peers"
 
 	"multivator/src/config"
@@ -18,15 +19,15 @@ func handleHallOrder(
 	peerList peers.PeerUpdate,
 	orderUpdateCh chan<- types.Orders,
 	bidTxBufCh chan<- Msg[Bid],
-	) types.ElevState {
-		// If we are alone, send order back
-		slog.Debug("Received hall order. Checking if we are alone", "peers", peerList.Peers)
-		if len(peerList.Peers) < 2 {
-			elevator.Orders[config.NodeID][hallOrder.Floor][hallOrder.Button] = true
-			orderUpdateCh <- elevator.Orders
-			} else {
-				// Start timer
-				cost := timeToServeOrder(elevator, hallOrder)
+) types.ElevState {
+	// If we are alone, send order back
+	slog.Debug("Received hall order. Checking if we are alone", "peers", peerList.Peers)
+	if len(peerList.Peers) < 2 {
+		elevator.Orders[config.NodeID][hallOrder.Floor][hallOrder.Button] = true
+		orderUpdateCh <- elevator.Orders
+	} else {
+		// Start timer
+		cost := timeToServeOrder(elevator, hallOrder)
 		slog.Debug("Sending initial bid")
 		bidEntry := Msg[Bid]{
 			SenderID: config.NodeID,

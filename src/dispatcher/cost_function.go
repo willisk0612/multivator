@@ -8,12 +8,13 @@ import (
 	"multivator/src/types"
 )
 
-// Creates a simulation to calculate the time based on:
-// - State: penalize for moving, reward for door open
-// - Accumulate time for each floor passed
 func timeToServeOrder(elevator types.ElevState, btnEvent types.HallOrder) time.Duration {
 	elevator.Orders[config.NodeID][btnEvent.Floor][btnEvent.Button] = true
-	duration := time.Duration(0)
+	var duration time.Duration
+	if elevator.Obstructed {
+		duration = 100 * time.Second
+		return duration
+	}
 
 	switch elevator.Behaviour {
 	case types.Idle:

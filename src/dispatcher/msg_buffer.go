@@ -23,11 +23,11 @@ func msgBufferTx[T MsgContent](msgBufTxCh chan Msg[T], msgTxCh chan Msg[T], atom
 
 // msgBufferRx receives a burst of messages from bcast.Receiver
 //   - ignores own messages
-//   - implements lamport timestamp for incoming messages
-//   - stores seen messages in a map of size 10 to avoid duplicates
+//   - implements lamport timestamp for causal ordering
+//   - stores seen messages in a map to avoid duplicates
 func msgBufferRx[T MsgContent](msgBufRxCh chan Msg[T], msgRxCh chan Msg[T], atomicCounter *atomic.Uint64) {
 	var seenMsgs sync.Map
-	recentMsgIDs := make([]string, 10)
+	recentMsgIDs := make([]string, config.MsgRepetitions)
 	var nextIndex atomic.Uint32
 
 	for msgRx := range msgRxCh {
@@ -35,6 +35,7 @@ func msgBufferRx[T MsgContent](msgBufRxCh chan Msg[T], msgRxCh chan Msg[T], atom
 			msgID := fmt.Sprintf("%d-%d", msgRx.SenderID, msgRx.Counter)
 
 			if _, seen := seenMsgs.LoadOrStore(msgID, true); !seen {
+				// Update Lamport timestamp
 				for {
 					localTime := atomicCounter.Load()
 					newTime := max(localTime, msgRx.Counter) + 1
@@ -43,7 +44,8 @@ func msgBufferRx[T MsgContent](msgBufRxCh chan Msg[T], msgRxCh chan Msg[T], atom
 					}
 				}
 
-				index := int((nextIndex.Add(1) - 1) % 10)
+				// Delete old message from seen messages
+				index := int((nextIndex.Add(1) - 1) % config.MsgRepetitions)
 				oldMsgID := recentMsgIDs[index]
 				if oldMsgID != "" {
 					seenMsgs.Delete(oldMsgID)

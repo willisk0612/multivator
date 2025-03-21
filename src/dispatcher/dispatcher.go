@@ -29,11 +29,11 @@ func Run(elevUpdateCh <-chan types.ElevState,
 	syncRxBufCh := make(chan Msg[Sync])
 	peerUpdateCh := make(chan peers.PeerUpdate)
 
+	bidMap := make(BidMap)
+
 	var peerList peers.PeerUpdate
 	var prevPeerList peers.PeerUpdate
 	var atomicCounter atomic.Uint64
-
-	bidMap := make(BidMap)
 
 	go bcast.Transmitter(config.BcastPort, bidTxCh, syncTxCh)
 	go bcast.Receiver(config.BcastPort, bidRxCh, syncRxCh)
@@ -97,12 +97,11 @@ func Run(elevUpdateCh <-chan types.ElevState,
 					elevator.Orders[config.NodeID][bidRx.Content.Order.Floor][bidRx.Content.Order.Button] = true
 					orderUpdateCh <- elevator.Orders
 				} else if bidMap[bidRx.Content.Order][assignee] != 0 {
-					// Cost is 0 means we dont need to set the lamp
 					elevator.Orders[assignee][bidRx.Content.Order.Floor][bidRx.Content.Order.Button] = true
 					orderUpdateCh <- elevator.Orders
 				}
+				delete(bidMap, bidRx.Content.Order)
 			}
-			delete(bidMap, bidRx.Content.Order)
 
 		case syncRx := <-syncRxBufCh:
 			elevator = syncOrders(elevator, syncRx)

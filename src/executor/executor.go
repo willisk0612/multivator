@@ -17,9 +17,9 @@ func Run(elevUpdateCh chan types.ElevState,
 	hallOrderCh chan<- types.HallOrder,
 	sendSyncCh chan<- bool,
 ) {
-	drvButtons := make(chan types.ButtonEvent)
-	drvFloors := make(chan int)
-	drvObstr := make(chan bool)
+	drvButtonsCh := make(chan types.ButtonEvent)
+	drvFloorsCh := make(chan int)
+	drvObstrCh := make(chan bool)
 	doorTimerTimeoutCh := make(chan bool)
 	doorTimerActionCh := make(chan timer.TimerAction)
 	doorTimerDuration := time.NewTimer(config.DoorOpenDuration)
@@ -35,9 +35,9 @@ func Run(elevUpdateCh chan types.ElevState,
 	elevator = initElevPos(elevator)
 
 	go timer.Run(doorTimerDuration, doorTimerTimeoutCh, doorTimerActionCh)
-	go elevio.PollButtons(drvButtons)
-	go elevio.PollFloorSensor(drvFloors)
-	go elevio.PollObstructionSwitch(drvObstr)
+	go elevio.PollButtons(drvButtonsCh)
+	go elevio.PollFloorSensor(drvFloorsCh)
+	go elevio.PollObstructionSwitch(drvObstrCh)
 
 	slog.Debug("Sending initial elevator state")
 	elevUpdateCh <- elevator
@@ -47,12 +47,14 @@ func Run(elevUpdateCh chan types.ElevState,
 
 		case elevUpdate := <-elevUpdateCh:
 			elevator = elevUpdate
+
 		case orderUpdate := <-orderUpdateCh:
 			syncHallLights(elevator.Orders, orderUpdate)
 			syncCabLights(elevator.Orders, orderUpdate)
 			elevator.Orders = orderUpdate
 			elevator = chooseAction(elevator, doorTimerActionCh, elevUpdateCh)
-		case btn := <-drvButtons:
+
+		case btn := <-drvButtonsCh:
 			slog.Debug("Button press received", "button", utils.FormatBtnEvent(btn))
 			if btn.Button == types.BT_Cab {
 				elevator.Orders[config.NodeID][btn.Floor][btn.Button] = true
@@ -64,7 +66,8 @@ func Run(elevUpdateCh chan types.ElevState,
 				elevUpdateCh <- elevator
 				hallOrderCh <- types.HallOrder{Floor: btn.Floor, Button: types.HallType(btn.Button)}
 			}
-		case floor := <-drvFloors:
+
+		case floor := <-drvFloorsCh:
 			elevator.Floor = floor
 			elevio.SetFloorIndicator(floor)
 
@@ -77,9 +80,11 @@ func Run(elevUpdateCh chan types.ElevState,
 				elevUpdateCh <- elevator
 				sendSyncCh <- true
 			}
-		case obstruction := <-drvObstr:
+
+		case obstruction := <-drvObstrCh:
 			elevator.Obstructed = obstruction
 			doorTimerActionCh <- timer.Start
+
 		case <-doorTimerTimeoutCh:
 			if elevator.Obstructed {
 				doorTimerActionCh <- timer.Start
