@@ -5,7 +5,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -47,26 +46,12 @@ func InitLogger() {
 	slog.SetDefault(logger)
 }
 
-func FormatBtnEvent(btnEvent types.ButtonEvent) string {
-	switch btnEvent.Button {
-	case types.BT_HallUp:
-		return fmt.Sprintf("HallUp(%d)", btnEvent.Floor)
-	case types.BT_HallDown:
-		return fmt.Sprintf("HallDown(%d)", btnEvent.Floor)
-	case types.BT_Cab:
-		return fmt.Sprintf("Cab(%d)", btnEvent.Floor)
-	}
-	return "Unknown"
-}
-
-func FindLowestID(nodes []string) int {
-	minID := len(nodes)
-	for _, node := range nodes {
-		nodeInt, _ := strconv.Atoi(node[5:])
-		if nodeInt < minID {
-			minID = nodeInt
+func ForEachOrder(orders types.Orders, action func(node, floor, btn int)) {
+	for node := range orders {
+		for floor := range orders[node] {
+			for btn := range orders[node][floor] {
+				action(node, floor, btn)
+			}
 		}
 	}
-
-	return minID
 }

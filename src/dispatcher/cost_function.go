@@ -8,6 +8,10 @@ import (
 	"multivator/src/types"
 )
 
+// timeToserveOrder is called before a bid is stored in the bidMap
+//   - returns a high duration if the elevator is obstructed
+//   - penalizes moving elevators, rewards door open elevators
+//   - uses recursive calls, and accumulates the duration for each floor
 func timeToServeOrder(elevator types.ElevState, btnEvent types.HallOrder) time.Duration {
 	elevator.Orders[config.NodeID][btnEvent.Floor][btnEvent.Button] = true
 	var duration time.Duration

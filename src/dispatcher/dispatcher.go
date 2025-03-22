@@ -54,7 +54,7 @@ func Run(elevUpdateCh <-chan types.ElevState,
 			elevator = elevUpdate
 
 		case hallOrder := <-hallOrderCh:
-			elevator = handleHallOrder(
+			elevator = createHallOrder(
 				elevator,
 				hallOrder,
 				bidMap,
@@ -111,7 +111,26 @@ func Run(elevUpdateCh <-chan types.ElevState,
 			}
 
 		case syncRx := <-syncRxBufCh:
-			elevator = syncOrders(elevator, syncRx)
+			// Sync received orders
+			utils.ForEachOrder(syncRx.Content.Orders, func(node, floor, btn int) {
+				switch types.ButtonType(btn) {
+				case types.BT_Cab:
+					// On RestoreCabOrders, merge local cab orders with received cab orders
+					if syncRx.Content.RestoreCabOrders && node == config.NodeID {
+						elevator.Orders[node][floor][btn] = elevator.Orders[node][floor][btn] ||
+							syncRx.Content.Orders[node][floor][btn]
+						return
+					}
+					// Only sync cab orders for different nodes, our own cab orders are handled in executor
+					if node != config.NodeID {
+						elevator.Orders[node][floor][btn] = syncRx.Content.Orders[node][floor][btn]
+					}
+				default: // Hall orders are overwritten
+					if node != config.NodeID {
+						elevator.Orders[node][floor][btn] = syncRx.Content.Orders[node][floor][btn]
+					}
+				}
+			})
 			orderUpdateCh <- elevator.Orders
 
 		case <-sendSyncCh:
@@ -149,26 +168,32 @@ func Run(elevUpdateCh <-chan types.ElevState,
 						slog.Debug("Checking lost peer", "peer", peer, "lostPeer", lostPeer)
 						if peer == lostPeer {
 							peerInt, _ := strconv.Atoi(peer[5:])
-							minID := utils.FindLowestID(update.Peers)
-							for floor := range elevator.Orders[peerInt] {
-								for btn := range elevator.Orders[peerInt][floor] {
-									if btn != int(types.BT_Cab) &&
-										elevator.Orders[peerInt][floor][btn] &&
-										config.NodeID == minID {
-										slog.Debug("Starting bidding process for lost order", "floor", floor, "btn", btn)
-										hallOrder := types.HallOrder{Floor: floor, Button: types.HallType(btn)}
-										elevator = handleHallOrder(
-											elevator,
-											hallOrder,
-											bidMap,
-											peerList,
-											orderUpdateCh,
-											bidTxBufCh,
-											bidTimeoutCh,
-										)
-									}
+							// Find the lowest node id
+							minID := len(peerList.Peers)
+							for _, node := range peerList.Peers {
+								nodeInt, _ := strconv.Atoi(node[5:])
+								if nodeInt < minID {
+									minID = nodeInt
 								}
 							}
+
+							utils.ForEachOrder(elevator.Orders, func(_, floor, btn int) {
+								if btn != int(types.BT_Cab) &&
+									elevator.Orders[peerInt][floor][btn] &&
+									config.NodeID == minID {
+									slog.Debug("Starting bidding process for lost order", "floor", floor, "btn", btn)
+									hallOrder := types.HallOrder{Floor: floor, Button: types.HallType(btn)}
+									elevator = createHallOrder(
+										elevator,
+										hallOrder,
+										bidMap,
+										peerList,
+										orderUpdateCh,
+										bidTxBufCh,
+										bidTimeoutCh,
+									)
+								}
+							})
 						}
 					}
 				}
@@ -178,10 +203,52 @@ func Run(elevUpdateCh <-chan types.ElevState,
 	}
 }
 
+// createHallOrder is called when a hall order is received, or if we need to overtake lost hall orders.
+//   - If we are alone, take the order immediately.
+//   - Else, start a bidding timeout, store own bid, and send the bid to the network.
+func createHallOrder(
+	elevator types.ElevState,
+	hallOrder types.HallOrder,
+	bidMap BidMap,
+	peerList peers.PeerUpdate,
+	orderUpdateCh chan<- types.Orders,
+	bidTxBufCh chan<- Msg[Bid],
+	bidTimeoutCh chan<- types.HallOrder,
+) types.ElevState {
+	slog.Debug("Received hall order. Checking if we are alone", "peers", peerList.Peers)
+	if len(peerList.Peers) < 2 {
+		elevator.Orders[config.NodeID][hallOrder.Floor][hallOrder.Button] = true
+		orderUpdateCh <- elevator.Orders
+		return elevator
+	}
+
+	// Start timeout timer for the bid
+	timer := time.AfterFunc(config.BidTimeout, func() {
+		bidTimeoutCh <- hallOrder
+	})
+
+	cost := timeToServeOrder(elevator, hallOrder)
+	bidEntry := Msg[Bid]{
+		SenderID: config.NodeID,
+		Type:     BidInitial,
+		Content:  Bid{Order: hallOrder, Cost: cost},
+	}
+	storeBid(bidEntry, bidMap)
+	// Attach the timer and timeout channel to the bid entry
+	// Maps are reference types, so we can update it here directly
+	entry := bidMap[hallOrder]
+	entry.Timer = timer
+	bidMap[hallOrder] = entry
+
+	bidTxBufCh <- bidEntry
+
+	return elevator
+}
+
+// storeBid is called on hall orders, initial bids, and reply bids.
+//   - Creates or stores the bid in the bidMap.
 func storeBid(msg Msg[Bid], bidMap BidMap) {
 	order := msg.Content.Order
-	cost := msg.Content.Cost
-
 	entry, exists := bidMap[order]
 	if !exists {
 		entry = BidMapValues{
@@ -189,7 +256,6 @@ func storeBid(msg Msg[Bid], bidMap BidMap) {
 			Timer: nil,
 		}
 	}
-
-	entry.Costs[msg.SenderID] = cost
+	entry.Costs[msg.SenderID] = msg.Content.Cost
 	bidMap[order] = entry
 }

@@ -30,14 +30,14 @@ type Bid struct {
 	Cost  time.Duration
 }
 
-type Sync struct {
-	Orders           types.Orders
-	RestoreCabOrders bool
-}
-
 type BidMapValues struct {
 	Costs map[int]time.Duration
 	Timer *time.Timer
 }
 
 type BidMap map[types.HallOrder]BidMapValues
+
+type Sync struct {
+	Orders           types.Orders
+	RestoreCabOrders bool
+}

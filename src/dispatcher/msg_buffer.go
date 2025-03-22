@@ -9,7 +9,7 @@ import (
 	"multivator/src/config"
 )
 
-// msgBufferTx sends a burst of messages to bcast.Transmitter
+// msgBufferTx is called as a goroutine multiple times for each message type
 //   - increments monotonic counter for each input message
 func msgBufferTx[T MsgContent](msgBufTxCh chan Msg[T], msgTxCh chan Msg[T], atomicCounter *atomic.Uint64) {
 	for msgBufTx := range msgBufTxCh {
@@ -21,10 +21,10 @@ func msgBufferTx[T MsgContent](msgBufTxCh chan Msg[T], msgTxCh chan Msg[T], atom
 	}
 }
 
-// msgBufferRx receives a burst of messages from bcast.Receiver
+// msgBufferRx is called as a goroutine multiple times for each message type
 //   - ignores own messages
 //   - implements lamport timestamp for causal ordering
-//   - stores seen messages in a map to avoid duplicates
+//   - stores seen messages in a map with id based on sender and counter
 func msgBufferRx[T MsgContent](msgBufRxCh chan Msg[T], msgRxCh chan Msg[T], atomicCounter *atomic.Uint64) {
 	var seenMsgs sync.Map
 	recentMsgIDs := make([]string, config.MsgRepetitions)

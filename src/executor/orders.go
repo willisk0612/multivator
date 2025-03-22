@@ -6,7 +6,8 @@ import (
 	"multivator/src/types"
 )
 
-// Clears order and turns off lamp for the current floor and direction
+// clearAtCurrentFloor is called in chooseAction and at floor arrival.
+//   - Clears orders and lights in the same direction as the elevator.
 func clearAtCurrentFloor(elevator types.ElevState) types.ElevState {
 	elevator.Orders[config.NodeID][elevator.Floor][types.BT_Cab] = false
 	elevio.SetButtonLamp(types.BT_Cab, elevator.Floor, false)
@@ -20,6 +21,8 @@ func clearAtCurrentFloor(elevator types.ElevState) types.ElevState {
 	return elevator
 }
 
+// OrdersToClearHere is called in clearAtCurrentFloor and in cost function.
+//   - Returns a list of orders to clear at the current floor.
 func OrdersToClearHere(elevator types.ElevState) [config.NumButtons]bool {
 	shouldClear := [config.NumButtons]bool{}
 
@@ -50,7 +53,8 @@ func OrdersToClearHere(elevator types.ElevState) [config.NumButtons]bool {
 	return shouldClear
 }
 
-// Checks if elevator should stop at current floor.
+// ShouldStopHere is called on floor sensor updates, and in cost function.
+//   - Returns true if there are hall orders in the same direction or cab orders at the current floor.
 func ShouldStopHere(elevator types.ElevState) bool {
 	switch elevator.Dir {
 	case types.MD_Up:
@@ -66,9 +70,8 @@ func ShouldStopHere(elevator types.ElevState) bool {
 	}
 }
 
-// Algorithm for choosing direction of elevator.
-//  1. If elevator is stopped, choose direction in which there are orders.
-//  2. If elevator is moving, continue in the same direction until there are no more orders in that direction.
+// ChooseDirection is called in chooseAction and in cost function.
+//   - The algorithm prioritizes hall orders in the same direction as the elevator.
 func ChooseDirection(elevator types.ElevState) types.DirnBehaviourPair {
 	switch elevator.Dir {
 	case types.MD_Up:
@@ -108,6 +111,8 @@ func ChooseDirection(elevator types.ElevState) types.DirnBehaviourPair {
 		return types.DirnBehaviourPair{Dir: types.MD_Stop, Behaviour: types.Idle}
 	}
 }
+
+// Helper functions for ChooseDirection
 
 func countOrders(elevator types.ElevState, startFloor int, endFloor int) (result int) {
 	for floor := startFloor; floor < endFloor; floor++ {

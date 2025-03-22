@@ -12,7 +12,7 @@ const (
 	MsgRepetitions   = 5
 	MsgInterval      = 10 * time.Millisecond
 	BidTimeout       = 1 * time.Second
-	NumElevators     = 2
+	NumElevators     = 3
 	NumFloors        = 4
 	NumButtons       = 3
 	SensorPollRate   = 25 * time.Millisecond

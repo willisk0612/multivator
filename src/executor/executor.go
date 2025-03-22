@@ -8,7 +8,6 @@ import (
 	"multivator/lib/driver/elevio"
 	"multivator/src/config"
 	"multivator/src/types"
-	"multivator/src/utils"
 )
 
 func Run(elevUpdateCh chan<- types.ElevState,
@@ -49,7 +48,7 @@ func Run(elevUpdateCh chan<- types.ElevState,
 			elevator = chooseAction(elevator, doorTimer, elevUpdateCh)
 
 		case btn := <-drvButtonsCh:
-			slog.Debug("Button press received", "button", utils.FormatBtnEvent(btn))
+			slog.Debug("Button press received", "button", btn.Button, "floor", btn.Floor)
 			if btn.Button == types.BT_Cab {
 				elevator.Orders[config.NodeID][btn.Floor][btn.Button] = true
 				elevio.SetButtonLamp(types.BT_Cab, btn.Floor, true)
@@ -79,11 +78,15 @@ func Run(elevUpdateCh chan<- types.ElevState,
 
 		case obstruction := <-drvObstrCh:
 			elevator.Obstructed = obstruction
-			doorTimer.Reset(config.DoorOpenDuration)
+			if doorTimer != nil {
+				doorTimer.Reset(config.DoorOpenDuration)
+			}
 
 		case <-doorTimeoutCh:
 			if elevator.Obstructed {
-				doorTimer.Reset(config.DoorOpenDuration)
+				if doorTimer != nil {
+					doorTimer.Reset(config.DoorOpenDuration)
+				}
 				continue
 			}
 			elevio.SetDoorOpenLamp(false)
@@ -95,7 +98,6 @@ func Run(elevUpdateCh chan<- types.ElevState,
 	}
 }
 
-// InitElevPos moves down until the first floor is detected, then stops
 func initElevPos(elevator types.ElevState) types.ElevState {
 	floor := elevio.GetFloor()
 	if floor == -1 {
@@ -109,35 +111,33 @@ func initElevPos(elevator types.ElevState) types.ElevState {
 	return elevator
 }
 
-// chooseAction decides what the elevator should do next
-//   - Chooses direction if we have orders in different floors
+// chooseAction is called on order updates from dispatcher, on cab calls and on door timeouts.
+//   - Moves elevator if we have orders in different floors
 //   - Opens door if we have orders here
 func chooseAction(elevator types.ElevState,
 	doorTimer *time.Timer,
 	elevUpdateCh chan<- types.ElevState,
 ) types.ElevState {
 	if elevator.Behaviour != types.Idle {
-		// chooseAction will be called again when the elevator is idle
 		return elevator
 	}
 	pair := ChooseDirection(elevator)
+	elevator.Behaviour = pair.Behaviour
+	elevator.Dir = pair.Dir
+
 	switch pair.Behaviour {
 	case types.Moving:
 		slog.Debug("Moving elevator", "direction", pair.Dir)
-		elevator.Dir = pair.Dir
-		elevator.Behaviour = pair.Behaviour
 		elevio.SetMotorDirection(elevator.Dir)
-		elevUpdateCh <- elevator
 	case types.DoorOpen:
-		elevator.Behaviour = types.DoorOpen
 		elevio.SetDoorOpenLamp(true)
 		elevator = clearAtCurrentFloor(elevator)
-		doorTimer.Reset(config.DoorOpenDuration)
-		elevUpdateCh <- elevator
+		if doorTimer != nil {
+			doorTimer.Reset(config.DoorOpenDuration)
+		}
 	default:
-		elevator.Behaviour = types.Idle
-		elevator.Dir = types.MD_Stop
 		elevio.SetMotorDirection(types.MD_Stop)
 	}
+	elevUpdateCh <- elevator
 	return elevator
 }
