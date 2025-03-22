@@ -8,6 +8,7 @@ import (
 	"multivator/lib/driver/elevio"
 	"multivator/src/config"
 	"multivator/src/types"
+	"multivator/src/utils"
 )
 
 func Run(elevUpdateCh chan<- types.ElevState,
@@ -41,10 +42,23 @@ func Run(elevUpdateCh chan<- types.ElevState,
 	for {
 		select {
 
-		case orderUpdate := <-orderUpdateCh:
-			syncHallLights(elevator.Orders, orderUpdate)
-			syncCabLights(elevator.Orders, orderUpdate)
-			elevator.Orders = orderUpdate
+		case receivedOrders := <-orderUpdateCh:
+			utils.ForEachOrder(elevator.Orders, func(node, floor, btn int) {
+				// Sync hall lights
+				if btn != int(types.BT_Cab) &&
+					elevator.Orders[node][floor][btn] != receivedOrders[node][floor][btn] {
+
+					elevio.SetButtonLamp(types.ButtonType(btn), floor, receivedOrders[node][floor][btn])
+				}
+				// Sync cab lights
+				if node == config.NodeID &&
+					btn == int(types.BT_Cab) &&
+					elevator.Orders[node][floor][btn] != receivedOrders[node][floor][btn] {
+
+					elevio.SetButtonLamp(types.BT_Cab, floor, receivedOrders[node][floor][btn])
+				}
+			})
+			elevator.Orders = receivedOrders
 			elevator = chooseAction(elevator, doorTimer, elevUpdateCh)
 
 		case btn := <-drvButtonsCh:
