@@ -2,7 +2,6 @@ package dispatcher
 
 import (
 	"fmt"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -26,7 +25,7 @@ func msgBufferTx[T MsgContent](msgBufTxCh chan Msg[T], msgTxCh chan Msg[T], atom
 //   - implements lamport timestamp for causal ordering
 //   - stores seen messages in a map with id based on sender and counter
 func msgBufferRx[T MsgContent](msgBufRxCh chan Msg[T], msgRxCh chan Msg[T], atomicCounter *atomic.Uint64) {
-	var seenMsgs sync.Map
+	seenMsgs := make(map[string]bool)
 	recentMsgIDs := make([]string, config.MsgRepetitions)
 	var nextIndex atomic.Uint32
 
@@ -34,7 +33,9 @@ func msgBufferRx[T MsgContent](msgBufRxCh chan Msg[T], msgRxCh chan Msg[T], atom
 		if msgRx.SenderID != config.NodeID {
 			msgID := fmt.Sprintf("%d-%d", msgRx.SenderID, msgRx.Counter)
 
-			if _, seen := seenMsgs.LoadOrStore(msgID, true); !seen {
+			if !seenMsgs[msgID] {
+				seenMsgs[msgID] = true
+
 				// Update Lamport timestamp
 				for {
 					localTime := atomicCounter.Load()
@@ -48,7 +49,7 @@ func msgBufferRx[T MsgContent](msgBufRxCh chan Msg[T], msgRxCh chan Msg[T], atom
 				index := int((nextIndex.Add(1) - 1) % config.MsgRepetitions)
 				oldMsgID := recentMsgIDs[index]
 				if oldMsgID != "" {
-					seenMsgs.Delete(oldMsgID)
+					delete(seenMsgs, oldMsgID)
 				}
 				recentMsgIDs[index] = msgID
 				msgBufRxCh <- msgRx
