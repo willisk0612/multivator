@@ -11,7 +11,7 @@ import (
 	"multivator/src/utils"
 )
 
-func Run(elevUpdateCh chan types.ElevState,
+func Run(elevUpdateCh chan<- types.ElevState,
 	orderUpdateCh <-chan types.Orders,
 	hallOrderCh chan<- types.HallOrder,
 	sendSyncCh chan<- bool,
@@ -41,9 +41,6 @@ func Run(elevUpdateCh chan types.ElevState,
 
 	for {
 		select {
-
-		case elevUpdate := <-elevUpdateCh:
-			elevator = elevUpdate
 
 		case orderUpdate := <-orderUpdateCh:
 			syncHallLights(elevator.Orders, orderUpdate)
@@ -117,7 +114,7 @@ func initElevPos(elevator types.ElevState) types.ElevState {
 //   - Opens door if we have orders here
 func chooseAction(elevator types.ElevState,
 	doorTimer *time.Timer,
-	elevUpdateCh chan types.ElevState,
+	elevUpdateCh chan<- types.ElevState,
 ) types.ElevState {
 	if elevator.Behaviour != types.Idle {
 		// chooseAction will be called again when the elevator is idle
