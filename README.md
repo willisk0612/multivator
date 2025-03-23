@@ -7,10 +7,10 @@ Modify ```src/config/config.go``` NumElevators constant to the number of elevato
 Example terminal commands for two elevators:
 
 ```bash
-cd lib/simulator && ./SimElevatorServer.exe --port 15657
+cd lib/simulator && ./SimElevatorServer.exe --port 17400
 ```
 ```bash
-cd lib/simulator && ./SimElevatorServer.exe --port 15658
+cd lib/simulator && ./SimElevatorServer.exe --port 17401
 ```
 ```bash
 go run src/main.go --id 0
