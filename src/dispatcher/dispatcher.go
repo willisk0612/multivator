@@ -163,29 +163,37 @@ func Run(elevUpdateCh <-chan types.ElevState,
 			// If a node goes from PeerUpdate.Peers to PeerUpdate.Lost, we overtake active hall orders
 			// Lowest node id initiates the bidding process
 			for _, lostPeer := range update.Lost {
-				for _, peer := range prevPeerList.Peers {
-					if peer == lostPeer {
-						peerInt, _ := strconv.Atoi(peer[5:])
-						minID := utils.FindLowestID(update.Peers)
-						utils.ForEachOrder(elevator.Orders, func(node, floor, btn int) {
-							if node == peerInt &&
-								btn != int(types.BT_Cab) &&
-								elevator.Orders[peerInt][floor][btn] &&
-								config.NodeID == minID {
-								hallOrder := types.HallOrder{Floor: floor, Button: types.HallType(btn)}
-								elevator = createHallOrder(
-									elevator,
-									hallOrder,
-									bidMap,
-									peerList,
-									orderUpdateCh,
-									bidTxBufCh,
-									bidTimeoutCh,
-								)
-							}
-						})
-					}
+				if !slices.Contains(prevPeerList.Peers, lostPeer) {
+					continue
 				}
+				var nodeInts []int
+				for _, node := range peerList.Peers {
+					nodeInt, _ := strconv.Atoi(node[5:])
+					nodeInts = append(nodeInts, nodeInt)
+				}
+				minID := slices.Min(nodeInts)
+
+				peerInt, _ := strconv.Atoi(lostPeer[5:])
+				if config.NodeID != minID {
+					continue
+				}
+
+				utils.ForEachOrder(elevator.Orders, func(node, floor, btn int) {
+					if node == peerInt &&
+						btn != int(types.BT_Cab) &&
+						elevator.Orders[peerInt][floor][btn] {
+						hallOrder := types.HallOrder{Floor: floor, Button: types.HallType(btn)}
+						elevator = createHallOrder(
+							elevator,
+							hallOrder,
+							bidMap,
+							peerList,
+							orderUpdateCh,
+							bidTxBufCh,
+							bidTimeoutCh,
+						)
+					}
+				})
 			}
 			prevPeerList = peerList
 		}

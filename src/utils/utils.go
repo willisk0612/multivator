@@ -3,7 +3,6 @@ package utils
 import (
 	"fmt"
 	"slices"
-	"strconv"
 
 	"multivator/lib/network/peers"
 	"multivator/src/config"
@@ -19,18 +18,6 @@ func ForEachOrder(orders types.Orders, action func(node, floor, btn int)) {
 			}
 		}
 	}
-}
-
-func FindLowestID(nodes []string) int {
-	minID := len(nodes)
-	for _, node := range nodes {
-		nodeInt, _ := strconv.Atoi(node[5:])
-		if nodeInt < minID {
-			minID = nodeInt
-		}
-	}
-
-	return minID
 }
 
 // PrintStatus is called when a PeerUpdate is received
