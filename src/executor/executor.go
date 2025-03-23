@@ -1,8 +1,6 @@
 package executor
 
 import (
-	"fmt"
-	"log/slog"
 	"time"
 
 	"multivator/lib/driver/elevio"
@@ -21,22 +19,18 @@ func Run(elevUpdateCh chan<- types.ElevState,
 	drvObstrCh := make(chan bool)
 	doorTimeoutCh := make(chan bool)
 	var doorTimer *time.Timer
-	port := 15657 + config.NodeID
-	elevio.Init(fmt.Sprintf("localhost:%d", port), config.NumFloors)
 
 	elevator := types.ElevState{
 		Dir:       types.MD_Stop,
 		Orders:    types.Orders{},
 		Behaviour: types.Idle,
 	}
-	slog.Debug("Initializing position")
 	elevator = initElevPos(elevator)
 
 	go elevio.PollButtons(drvButtonsCh)
 	go elevio.PollFloorSensor(drvFloorsCh)
 	go elevio.PollObstructionSwitch(drvObstrCh)
 
-	slog.Debug("Sending initial elevator state")
 	elevUpdateCh <- elevator
 
 	for {
@@ -62,7 +56,6 @@ func Run(elevUpdateCh chan<- types.ElevState,
 			elevator = chooseAction(elevator, doorTimer, elevUpdateCh)
 
 		case btn := <-drvButtonsCh:
-			slog.Debug("Button press received", "button", btn.Button, "floor", btn.Floor)
 			if btn.Button == types.BT_Cab {
 				elevator.Orders[config.NodeID][btn.Floor][btn.Button] = true
 				elevio.SetButtonLamp(types.BT_Cab, btn.Floor, true)
@@ -141,7 +134,6 @@ func chooseAction(elevator types.ElevState,
 
 	switch pair.Behaviour {
 	case types.Moving:
-		slog.Debug("Moving elevator", "direction", pair.Dir)
 		elevio.SetMotorDirection(elevator.Dir)
 	case types.DoorOpen:
 		elevio.SetDoorOpenLamp(true)

@@ -1,24 +1,26 @@
 package config
 
 import (
-	"log/slog"
 	"time"
 )
 
-var NodeID int
+var (
+	NodeID    int
+	BcastPort int
+	PeersPort int
+)
 
 const (
-	LogLevel         = slog.LevelDebug
 	MsgRepetitions   = 5
 	MsgInterval      = 10 * time.Millisecond
 	BidTimeout       = 1 * time.Second
-	NumElevators     = 2
+	NumElevators     = 3
 	NumFloors        = 4
 	NumButtons       = 3
 	SensorPollRate   = 25 * time.Millisecond
 	DoorOpenDuration = 3 * time.Second
 	TravelDuration   = 2 * time.Second
 	DirChangePenalty = 2 * time.Second
-	BcastPort        = 16400
-	PeersPort        = 17400
+	BcastBasePort    = 16400
+	PeersBasePort    = 17400
 )

@@ -2,7 +2,7 @@ package dispatcher
 
 import (
 	"fmt"
-	"log/slog"
+	"slices"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -67,7 +67,6 @@ func Run(elevUpdateCh <-chan types.ElevState,
 		case bidRx := <-bidRxBufCh:
 			switch bidRx.Type {
 			case BidInitial:
-				slog.Debug("Received initial bid. Sending reply bid")
 				storeBid(bidRx, bidMap)
 				cost := timeToServeOrder(elevator, bidRx.Content.Order)
 				bidEntry := Msg[Bid]{
@@ -78,13 +77,11 @@ func Run(elevUpdateCh <-chan types.ElevState,
 				storeBid(bidEntry, bidMap)
 				bidTxBufCh <- bidEntry
 			case BidReply:
-				slog.Debug("Received reply bid")
 				storeBid(bidRx, bidMap)
 			}
 
 			numBids := len(bidMap[bidRx.Content.Order].Costs)
 			numPeers := len(peerList.Peers)
-			slog.Debug("Checking if all bids are received", "bids:", numBids, "peers:", numPeers)
 			if numBids == numPeers {
 				bidEntry := bidMap[bidRx.Content.Order]
 				if bidEntry.Timer != nil {
@@ -151,8 +148,13 @@ func Run(elevUpdateCh <-chan types.ElevState,
 			}
 
 		case update := <-peerUpdateCh:
-			slog.Debug("Peer update", "update", update)
 			peerList.Peers = update.Peers
+			// If we connect or disconnect, print status
+			ownID := fmt.Sprintf("node-%d", config.NodeID)
+			if update.New == ownID || (slices.Contains(prevPeerList.Peers, ownID) && slices.Contains(update.Lost, ownID)) {
+				utils.PrintStatus(peerList)
+			}
+
 			// If a node different from our own connects, sync state with restoring cab orders.
 			if update.New != fmt.Sprintf("node-%d", config.NodeID) && update.New != "" {
 				syncTxBufCh <- Msg[Sync]{
@@ -160,45 +162,38 @@ func Run(elevUpdateCh <-chan types.ElevState,
 					Content:  Sync{Orders: elevator.Orders, RestoreCabOrders: true},
 					SenderID: config.NodeID,
 				}
-
 				// If a node goes from PeerUpdate.Peers to PeerUpdate.Lost, we overtake active hall orders
 				// Lowest node id initiates the bidding process
 				for _, lostPeer := range update.Lost {
-					for _, peer := range prevPeerList.Peers {
-						slog.Debug("Checking lost peer", "peer", peer, "lostPeer", lostPeer)
-						if peer == lostPeer {
-							peerInt, _ := strconv.Atoi(peer[5:])
-							// Find the lowest node id
-							minID := len(peerList.Peers)
-							for _, node := range peerList.Peers {
-								nodeInt, _ := strconv.Atoi(node[5:])
-								if nodeInt < minID {
-									minID = nodeInt
-								}
-							}
-
-							utils.ForEachOrder(elevator.Orders, func(_, floor, btn int) {
-								if btn != int(types.BT_Cab) &&
-									elevator.Orders[peerInt][floor][btn] &&
-									config.NodeID == minID {
-									slog.Debug("Starting bidding process for lost order", "floor", floor, "btn", btn)
-									hallOrder := types.HallOrder{Floor: floor, Button: types.HallType(btn)}
-									elevator = createHallOrder(
-										elevator,
-										hallOrder,
-										bidMap,
-										peerList,
-										orderUpdateCh,
-										bidTxBufCh,
-										bidTimeoutCh,
-									)
-								}
-							})
+					if slices.Contains(prevPeerList.Peers, lostPeer) {
+						peerInt, _ := strconv.Atoi(lostPeer[5:])
+						nodeIDs := make([]int, 0, len(peerList.Peers))
+						for _, node := range peerList.Peers {
+							nodeID, _ := strconv.Atoi(node[5:])
+							nodeIDs = append(nodeIDs, nodeID)
 						}
+						minID := slices.Min(nodeIDs)
+
+						utils.ForEachOrder(elevator.Orders, func(_, floor, btn int) {
+							if btn != int(types.BT_Cab) &&
+								elevator.Orders[peerInt][floor][btn] &&
+								config.NodeID == minID {
+								hallOrder := types.HallOrder{Floor: floor, Button: types.HallType(btn)}
+								elevator = createHallOrder(
+									elevator,
+									hallOrder,
+									bidMap,
+									peerList,
+									orderUpdateCh,
+									bidTxBufCh,
+									bidTimeoutCh,
+								)
+							}
+						})
 					}
 				}
-				prevPeerList = peerList
 			}
+			prevPeerList = peerList
 		}
 	}
 }
@@ -215,7 +210,6 @@ func createHallOrder(
 	bidTxBufCh chan<- Msg[Bid],
 	bidTimeoutCh chan<- types.HallOrder,
 ) types.ElevState {
-	slog.Debug("Received hall order. Checking if we are alone", "peers", peerList.Peers)
 	if len(peerList.Peers) < 2 {
 		elevator.Orders[config.NodeID][hallOrder.Floor][hallOrder.Button] = true
 		orderUpdateCh <- elevator.Orders
