@@ -35,11 +35,11 @@ func FindLowestID(nodes []string) int {
 
 // PrintStatus is called when a PeerUpdate is received
 func PrintStatus(peersList peers.PeerUpdate) {
-	fmt.Printf("\rNode ID: %d | ", config.NodeID) // Note: removed \n, added space
+	fmt.Printf("\rNode ID: %d | ", config.NodeID)
 	ownID := fmt.Sprintf("node-%d", config.NodeID)
 	if slices.Contains(peersList.Peers, ownID) {
-		fmt.Print("Status: Connected    \r") // Added padding spaces and \r
+		fmt.Print("Status: Connected    \r")
 	} else {
-		fmt.Print("Status: Disconnected\r") // Added \r
+		fmt.Print("Status: Disconnected\r")
 	}
 }
