@@ -97,10 +97,7 @@ func Run(elevUpdateCh <-chan types.ElevState,
 					}
 				}
 
-				if assignee == config.NodeID {
-					elevator.Orders[config.NodeID][bidRx.Content.Order.Floor][bidRx.Content.Order.Button] = true
-					orderUpdateCh <- elevator.Orders
-				} else if bidEntry.Costs[assignee] != 0 {
+				if assignee == config.NodeID || bidEntry.Costs[config.NodeID] == 0 {
 					elevator.Orders[assignee][bidRx.Content.Order.Floor][bidRx.Content.Order.Button] = true
 					orderUpdateCh <- elevator.Orders
 				}
@@ -166,22 +163,22 @@ func Run(elevUpdateCh <-chan types.ElevState,
 				if !slices.Contains(prevPeerList.Peers, lostPeer) {
 					continue
 				}
+
 				var nodeInts []int
 				for _, node := range peerList.Peers {
 					nodeInt, _ := strconv.Atoi(node[5:])
 					nodeInts = append(nodeInts, nodeInt)
 				}
 				minID := slices.Min(nodeInts)
-
-				peerInt, _ := strconv.Atoi(lostPeer[5:])
 				if config.NodeID != minID {
 					continue
 				}
 
+				lostPeerInt, _ := strconv.Atoi(lostPeer[5:])
 				utils.ForEachOrder(elevator.Orders, func(node, floor, btn int) {
-					if node == peerInt &&
+					if node == lostPeerInt &&
 						btn != int(types.BT_Cab) &&
-						elevator.Orders[peerInt][floor][btn] {
+						elevator.Orders[lostPeerInt][floor][btn] {
 						hallOrder := types.HallOrder{Floor: floor, Button: types.HallType(btn)}
 						elevator = createHallOrder(
 							elevator,
