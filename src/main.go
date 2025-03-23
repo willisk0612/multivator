@@ -15,9 +15,8 @@ func main() {
 	nodeID := flag.Int("id", 0, "Node ID of the elevator")
 	flag.Parse()
 	config.NodeID = *nodeID
-	config.BcastPort = config.BcastBasePort + config.NodeID
-	config.PeersPort = config.PeersBasePort + config.NodeID
-	elevio.Init(fmt.Sprintf("localhost:%d", config.PeersPort), config.NumFloors)
+	hwPort := config.PeersPort + config.NodeID
+	elevio.Init(fmt.Sprintf("localhost:%d", hwPort), config.NumFloors)
 
 	elevUpdateCh := make(chan types.ElevState)
 	hallOrderCh := make(chan types.HallOrder)

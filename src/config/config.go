@@ -4,11 +4,7 @@ import (
 	"time"
 )
 
-var (
-	NodeID    int
-	BcastPort int
-	PeersPort int
-)
+var NodeID int
 
 const (
 	MsgRepetitions   = 5
@@ -21,6 +17,6 @@ const (
 	DoorOpenDuration = 3 * time.Second
 	TravelDuration   = 2 * time.Second
 	DirChangePenalty = 2 * time.Second
-	BcastBasePort    = 16400
-	PeersBasePort    = 17400
+	BcastPort        = 16400
+	PeersPort        = 17400
 )
