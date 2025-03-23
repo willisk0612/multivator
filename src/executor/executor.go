@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"fmt"
 	"time"
 
 	"multivator/lib/driver/elevio"
@@ -19,6 +20,8 @@ func Run(elevUpdateCh chan<- types.ElevState,
 	drvObstrCh := make(chan bool)
 	doorTimeoutCh := make(chan bool)
 	var doorTimer *time.Timer
+	port := config.BcastPort + config.NodeID
+	elevio.Init(fmt.Sprintf("localhost:%d", port), config.NumFloors)
 
 	elevator := types.ElevState{
 		Dir:       types.MD_Stop,
@@ -44,14 +47,16 @@ func Run(elevUpdateCh chan<- types.ElevState,
 
 					elevio.SetButtonLamp(types.ButtonType(btn), floor, receivedOrders[node][floor][btn])
 				}
+
 				// Sync cab lights
-				if node == config.NodeID &&
+				if config.NodeID == node &&
 					btn == int(types.BT_Cab) &&
 					elevator.Orders[node][floor][btn] != receivedOrders[node][floor][btn] {
 
 					elevio.SetButtonLamp(types.BT_Cab, floor, receivedOrders[node][floor][btn])
-				}
+					}
 			})
+
 			elevator.Orders = receivedOrders
 			elevator = chooseAction(elevator, doorTimer, elevUpdateCh)
 
