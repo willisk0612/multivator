@@ -54,7 +54,7 @@ func Run(elevUpdateCh chan<- types.ElevState,
 					elevator.Orders[node][floor][btn] != receivedOrders[node][floor][btn] {
 
 					elevio.SetButtonLamp(types.BT_Cab, floor, receivedOrders[node][floor][btn])
-					}
+				}
 			})
 
 			elevator.Orders = receivedOrders
