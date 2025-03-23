@@ -97,7 +97,7 @@ func Run(elevUpdateCh <-chan types.ElevState,
 					}
 				}
 
-				if assignee == config.NodeID || bidEntry.Costs[config.NodeID] == 0 {
+				if assignee == config.NodeID || bidEntry.Costs[config.NodeID] != 0 {
 					elevator.Orders[assignee][bidRx.Content.Order.Floor][bidRx.Content.Order.Button] = true
 					orderUpdateCh <- elevator.Orders
 				}
@@ -160,37 +160,39 @@ func Run(elevUpdateCh <-chan types.ElevState,
 			// If a node goes from PeerUpdate.Peers to PeerUpdate.Lost, we overtake active hall orders
 			// Lowest node id initiates the bidding process
 			for _, lostPeer := range update.Lost {
-				if !slices.Contains(prevPeerList.Peers, lostPeer) {
-					continue
-				}
-
-				var nodeInts []int
-				for _, node := range peerList.Peers {
-					nodeInt, _ := strconv.Atoi(node[5:])
-					nodeInts = append(nodeInts, nodeInt)
-				}
-				minID := slices.Min(nodeInts)
-				if config.NodeID != minID {
-					continue
-				}
-
-				lostPeerInt, _ := strconv.Atoi(lostPeer[5:])
-				utils.ForEachOrder(elevator.Orders, func(node, floor, btn int) {
-					if node == lostPeerInt &&
-						btn != int(types.BT_Cab) &&
-						elevator.Orders[lostPeerInt][floor][btn] {
-						hallOrder := types.HallOrder{Floor: floor, Button: types.HallType(btn)}
-						elevator = createHallOrder(
-							elevator,
-							hallOrder,
-							bidMap,
-							peerList,
-							orderUpdateCh,
-							bidTxBufCh,
-							bidTimeoutCh,
-						)
+				for _, prevPeer := range prevPeerList.Peers {
+					if prevPeer != lostPeer {
+						continue
 					}
-				})
+
+					var nodeInts []int
+					for _, node := range peerList.Peers {
+						nodeInt, _ := strconv.Atoi(node[5:])
+						nodeInts = append(nodeInts, nodeInt)
+					}
+					minID := slices.Min(nodeInts)
+					if config.NodeID != minID {
+						continue
+					}
+
+					lostPeerInt, _ := strconv.Atoi(lostPeer[5:])
+					utils.ForEachOrder(elevator.Orders, func(node, floor, btn int) {
+						if node == lostPeerInt &&
+							btn != int(types.BT_Cab) &&
+							elevator.Orders[lostPeerInt][floor][btn] {
+							hallOrder := types.HallOrder{Floor: floor, Button: types.HallType(btn)}
+							elevator = createHallOrder(
+								elevator,
+								hallOrder,
+								bidMap,
+								peerList,
+								orderUpdateCh,
+								bidTxBufCh,
+								bidTimeoutCh,
+							)
+						}
+					})
+				}
 			}
 			prevPeerList = peerList
 		}
