@@ -34,7 +34,8 @@ func Run(elevUpdateCh <-chan types.ElevState,
 	bidMap := make(BidMap)
 
 	var peerList peers.PeerUpdate
-	var prevPeerList peers.PeerUpdate
+	var prevPeerList []string
+	var prevLostPeers []string
 	var atomicCounter atomic.Uint64
 
 	go bcast.Transmitter(config.BcastPort, bidTxCh, syncTxCh)
@@ -158,11 +159,12 @@ func Run(elevUpdateCh <-chan types.ElevState,
 			peerList.Peers = update.Peers
 			ownID := fmt.Sprintf("node-%d", config.NodeID)
 
-			if update.New == ownID || (slices.Contains(prevPeerList.Peers, ownID) && slices.Contains(update.Lost, ownID)) {
+			if update.New == ownID || (slices.Contains(prevPeerList, ownID) && slices.Contains(update.Lost, ownID)) {
 				utils.PrintStatus(peerList)
 			}
-			// If a node different from our own connects, sync state with restoring cab orders.
-			if update.New != ownID && update.New != "" {
+
+			// If we detect rising pulse from prevLostPeers to update.New, RestoreCabOrders
+			if slices.Contains(prevLostPeers, update.New) {
 				syncTxBufCh <- Msg[Sync]{
 					Type:     RestoreCabOrders,
 					Content:  Sync{Orders: elevator.Orders},
@@ -171,43 +173,32 @@ func Run(elevUpdateCh <-chan types.ElevState,
 			}
 
 			// If a node goes from PeerUpdate.Peers to PeerUpdate.Lost, we overtake active hall orders
-			// Lowest node id initiates the bidding process
 			for _, lostPeer := range update.Lost {
-				for _, prevPeer := range prevPeerList.Peers {
-					if prevPeer != lostPeer {
-						continue
-					}
-
-					var nodeInts []int
-					for _, node := range peerList.Peers {
-						nodeInt, _ := strconv.Atoi(node[5:])
-						nodeInts = append(nodeInts, nodeInt)
-					}
-					minID := slices.Min(nodeInts)
-					if config.NodeID != minID {
-						continue
-					}
-
-					lostPeerInt, _ := strconv.Atoi(lostPeer[5:])
-					utils.ForEachOrder(elevator.Orders, func(node, floor, btn int) {
-						if node == lostPeerInt &&
-							btn != int(types.BT_Cab) &&
-							elevator.Orders[lostPeerInt][floor][btn] {
-							hallOrder := types.HallOrder{Floor: floor, Button: types.HallType(btn)}
-							elevator = createHallOrder(
-								elevator,
-								hallOrder,
-								bidMap,
-								peerList,
-								orderUpdateCh,
-								bidTxBufCh,
-								bidTimeoutCh,
-							)
-						}
-					})
+				if !slices.Contains(prevPeerList, lostPeer) {
+					continue
 				}
+
+				lostPeerInt, _ := strconv.Atoi(lostPeer[5:])
+				utils.ForEachOrder(elevator.Orders, func(node, floor, btn int) {
+					if node == lostPeerInt &&
+						btn != int(types.BT_Cab) &&
+						elevator.Orders[lostPeerInt][floor][btn] {
+
+						hallOrder := types.HallOrder{Floor: floor, Button: types.HallType(btn)}
+						elevator = createHallOrder(
+							elevator,
+							hallOrder,
+							bidMap,
+							peerList,
+							orderUpdateCh,
+							bidTxBufCh,
+							bidTimeoutCh,
+						)
+					}
+				})
 			}
-			prevPeerList = peerList
+			prevPeerList = peerList.Peers
+			prevLostPeers = update.Lost
 		}
 	}
 }
