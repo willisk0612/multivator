@@ -14,6 +14,7 @@ func Run(elevUpdateCh chan<- types.ElevState,
 	orderUpdateCh <-chan types.Orders,
 	hallOrderCh chan<- types.HallOrder,
 	sendSyncCh chan<- bool,
+	startDoorTimerCh <-chan bool,
 ) {
 	drvButtonsCh := make(chan types.ButtonEvent)
 	drvFloorsCh := make(chan int)
@@ -58,13 +59,20 @@ func Run(elevUpdateCh chan<- types.ElevState,
 			})
 
 			elevator.Orders = receivedOrders
-			elevator = chooseAction(elevator, doorTimer, elevUpdateCh)
+			elevator = chooseAction(elevator, doorTimer, doorTimeoutCh)
+			elevUpdateCh <- elevator
 
 		case btn := <-drvButtonsCh:
 			if btn.Button == types.BT_Cab {
+				// If we are on the same floor, only open the door
+				if elevator.Floor == btn.Floor {
+					startDoorTimer(&doorTimer, doorTimeoutCh)
+					continue
+				}
+
 				elevator.Orders[config.NodeID][btn.Floor][btn.Button] = true
 				elevio.SetButtonLamp(types.BT_Cab, btn.Floor, true)
-				elevator = chooseAction(elevator, doorTimer, elevUpdateCh)
+				elevator = chooseAction(elevator, doorTimer, doorTimeoutCh)
 				elevUpdateCh <- elevator
 				sendSyncCh <- true
 			} else {
@@ -80,32 +88,28 @@ func Run(elevUpdateCh chan<- types.ElevState,
 				elevio.SetMotorDirection(types.MD_Stop)
 				elevator = clearAtCurrentFloor(elevator)
 				elevator.Behaviour = types.DoorOpen
-				elevio.SetDoorOpenLamp(true)
-				doorTimer = time.AfterFunc(config.DoorOpenDuration, func() {
-					doorTimeoutCh <- true
-				})
+				startDoorTimer(&doorTimer, doorTimeoutCh)
 				elevUpdateCh <- elevator
 				sendSyncCh <- true
 			}
 
 		case obstruction := <-drvObstrCh:
 			elevator.Obstructed = obstruction
-			if doorTimer != nil {
-				doorTimer.Reset(config.DoorOpenDuration)
-			}
-
+			startDoorTimer(&doorTimer, doorTimeoutCh)
 		case <-doorTimeoutCh:
 			if elevator.Obstructed {
-				if doorTimer != nil {
-					doorTimer.Reset(config.DoorOpenDuration)
-				}
+				startDoorTimer(&doorTimer, doorTimeoutCh)
 				continue
 			}
 			elevio.SetDoorOpenLamp(false)
 			elevator.Behaviour = types.Idle
-			elevator = chooseAction(elevator, doorTimer, elevUpdateCh)
+			elevator = chooseAction(elevator, doorTimer, doorTimeoutCh)
 			elevUpdateCh <- elevator
 			sendSyncCh <- true
+
+		case <-startDoorTimerCh:
+			elevator.Behaviour = types.DoorOpen
+			startDoorTimer(&doorTimer, doorTimeoutCh)
 		}
 	}
 }
@@ -128,7 +132,7 @@ func initElevPos(elevator types.ElevState) types.ElevState {
 //   - Opens door if we have orders here
 func chooseAction(elevator types.ElevState,
 	doorTimer *time.Timer,
-	elevUpdateCh chan<- types.ElevState,
+	doorTimeoutCh chan bool,
 ) types.ElevState {
 	if elevator.Behaviour != types.Idle {
 		return elevator
@@ -141,14 +145,22 @@ func chooseAction(elevator types.ElevState,
 	case types.Moving:
 		elevio.SetMotorDirection(elevator.Dir)
 	case types.DoorOpen:
-		elevio.SetDoorOpenLamp(true)
 		elevator = clearAtCurrentFloor(elevator)
-		if doorTimer != nil {
-			doorTimer.Reset(config.DoorOpenDuration)
-		}
+		startDoorTimer(&doorTimer, doorTimeoutCh)
 	default:
 		elevio.SetMotorDirection(types.MD_Stop)
 	}
-	elevUpdateCh <- elevator
 	return elevator
+}
+
+// startDoorTimer starts/restarts the door timer and sets the door open lamp.
+func startDoorTimer(doorTimer **time.Timer, doorTimeoutCh chan bool) {
+	elevio.SetDoorOpenLamp(true)
+	if *doorTimer != nil {
+		(*doorTimer).Reset(config.DoorOpenDuration)
+	} else {
+		*doorTimer = time.AfterFunc(config.DoorOpenDuration, func() {
+			doorTimeoutCh <- true
+		})
+	}
 }

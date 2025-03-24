@@ -18,6 +18,7 @@ func Run(elevUpdateCh <-chan types.ElevState,
 	orderUpdateCh chan<- types.Orders,
 	hallOrderCh <-chan types.HallOrder,
 	sendSyncCh <-chan bool,
+	startDoorTimerCh chan<- bool,
 ) {
 	bidTxCh := make(chan Msg[Bid])
 	bidTxBufCh := make(chan Msg[Bid])
@@ -97,7 +98,16 @@ func Run(elevUpdateCh <-chan types.ElevState,
 					}
 				}
 
-				if assignee == config.NodeID || bidEntry.Costs[config.NodeID] != 0 {
+				if assignee == config.NodeID {
+					// If we are on the same floor, only open the door
+					if elevator.Floor == bidRx.Content.Order.Floor {
+						elevator.Behaviour = types.DoorOpen
+						startDoorTimerCh <- true
+						continue
+					} // Else store the order
+					elevator.Orders[assignee][bidRx.Content.Order.Floor][bidRx.Content.Order.Button] = true
+					orderUpdateCh <- elevator.Orders
+				} else if bidEntry.Costs[assignee] != 0 {
 					elevator.Orders[assignee][bidRx.Content.Order.Floor][bidRx.Content.Order.Button] = true
 					orderUpdateCh <- elevator.Orders
 				}
