@@ -11,7 +11,8 @@ type MsgType int
 const (
 	BidInitial MsgType = iota
 	BidReply
-	SyncMsg
+	SyncOrders
+	RestoreCabOrders
 )
 
 type Msg[Content MsgContent] struct {
@@ -38,6 +39,5 @@ type BidMapValues struct {
 type BidMap map[types.HallOrder]BidMapValues
 
 type Sync struct {
-	Orders           types.Orders
-	RestoreCabOrders bool
+	Orders types.Orders
 }

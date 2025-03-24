@@ -110,7 +110,10 @@ func Run(elevUpdateCh <-chan types.ElevState,
 				switch types.ButtonType(btn) {
 				case types.BT_Cab:
 					// On RestoreCabOrders, merge local cab orders with received cab orders
-					if node == config.NodeID && syncRx.Content.RestoreCabOrders {
+					// Clear same floor immediately
+					if node == config.NodeID &&
+						syncRx.Type == RestoreCabOrders &&
+						elevator.Floor != floor {
 						elevator.Orders[node][floor][btn] = elevator.Orders[node][floor][btn] ||
 							syncRx.Content.Orders[node][floor][btn]
 					} else if node != config.NodeID { // Only sync cab orders from other nodes
@@ -126,8 +129,8 @@ func Run(elevUpdateCh <-chan types.ElevState,
 
 		case <-sendSyncCh:
 			syncTxBufCh <- Msg[Sync]{
-				Type:     SyncMsg,
-				Content:  Sync{Orders: elevator.Orders, RestoreCabOrders: false},
+				Type:     SyncOrders,
+				Content:  Sync{Orders: elevator.Orders},
 				SenderID: config.NodeID,
 			}
 
@@ -151,8 +154,8 @@ func Run(elevUpdateCh <-chan types.ElevState,
 			// If a node different from our own connects, sync state with restoring cab orders.
 			if update.New != ownID && update.New != "" {
 				syncTxBufCh <- Msg[Sync]{
-					Type:     SyncMsg,
-					Content:  Sync{Orders: elevator.Orders, RestoreCabOrders: true},
+					Type:     RestoreCabOrders,
+					Content:  Sync{Orders: elevator.Orders},
 					SenderID: config.NodeID,
 				}
 			}
