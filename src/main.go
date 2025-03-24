@@ -18,8 +18,9 @@ func main() {
 	hallOrderCh := make(chan types.HallOrder)
 	sendSyncCh := make(chan bool)
 	orderUpdateCh := make(chan types.Orders, config.NumElevators)
+	startDoorTimerCh := make(chan bool)
 
-	go dispatcher.Run(elevUpdateCh, orderUpdateCh, hallOrderCh, sendSyncCh)
-	go executor.Run(elevUpdateCh, orderUpdateCh, hallOrderCh, sendSyncCh)
+	go dispatcher.Run(elevUpdateCh, orderUpdateCh, hallOrderCh, sendSyncCh, startDoorTimerCh)
+	go executor.Run(elevUpdateCh, orderUpdateCh, hallOrderCh, sendSyncCh, startDoorTimerCh)
 	select {}
 }
