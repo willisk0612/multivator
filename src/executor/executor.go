@@ -2,12 +2,18 @@ package executor
 
 import (
 	"fmt"
+	"time"
 
 	"multivator/lib/driver/elevio"
 	"multivator/src/config"
 	"multivator/src/types"
 	"multivator/src/utils"
 )
+
+type DoorTimer struct {
+	timer     *time.Timer
+	timeoutCh chan bool
+}
 
 func Run(elevUpdateCh chan<- types.ElevState,
 	orderUpdateCh <-chan types.Orders,
@@ -150,4 +156,17 @@ func syncLights(elevator *types.ElevState, receivedOrders types.Orders) {
 			}
 		}
 	})
+}
+
+// openDoor modifies elevator state, sets door lamp and starts the door timer
+func openDoor(elevator *types.ElevState, doorTimer DoorTimer) {
+	elevator.Behaviour = types.DoorOpen
+	elevio.SetDoorOpenLamp(true)
+	if doorTimer.timer != nil {
+		(doorTimer.timer).Reset(config.DoorOpenDuration)
+	} else {
+		doorTimer.timer = time.AfterFunc(config.DoorOpenDuration, func() {
+			doorTimer.timeoutCh <- true
+		})
+	}
 }
