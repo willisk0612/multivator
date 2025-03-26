@@ -6,18 +6,10 @@ import (
 	"multivator/src/types"
 )
 
-type MsgType int
-
-const (
-	BidInitial MsgType = iota
-	BidReply
-	SyncOrders
-	RestoreCabOrders
-)
+// Message types
 
 type Msg[Content MsgContent] struct {
 	SenderID int
-	Type     MsgType
 	Content  Content
 	Counter  uint64
 }
@@ -26,10 +18,33 @@ type MsgContent interface {
 	Bid | Sync
 }
 
+type (
+	BidType  int
+	SyncType int
+)
+
+const (
+	BidInitial BidType = iota
+	BidReply
+)
+
+const (
+	SyncOrders SyncType = iota // Sync without restoring cab orders
+	SyncCab                    // Sync with restoring cab orders
+)
+
 type Bid struct {
+	Type  BidType
 	Order types.HallOrder
 	Cost  time.Duration
 }
+
+type Sync struct {
+	Type   SyncType
+	Orders types.Orders
+}
+
+// Local types
 
 type BidMapValues struct {
 	Costs map[int]time.Duration
@@ -37,7 +52,3 @@ type BidMapValues struct {
 }
 
 type BidMap map[types.HallOrder]BidMapValues
-
-type Sync struct {
-	Orders types.Orders
-}

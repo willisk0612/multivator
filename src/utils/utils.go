@@ -21,10 +21,10 @@ func ForEachOrder(orders types.Orders, action func(node, floor, btn int)) {
 }
 
 // PrintStatus is called when a PeerUpdate is received
-func PrintStatus(peersList peers.PeerUpdate) {
+func PrintStatus(peerUpdate peers.PeerUpdate) {
 	fmt.Printf("\rNode ID: %d | ", config.NodeID)
 	ownID := fmt.Sprintf("node-%d", config.NodeID)
-	if slices.Contains(peersList.Peers, ownID) {
+	if slices.Contains(peerUpdate.Peers, ownID) {
 		fmt.Print("Status: Connected    \r")
 	} else {
 		fmt.Print("Status: Disconnected\r")

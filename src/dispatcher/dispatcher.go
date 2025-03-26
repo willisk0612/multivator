@@ -18,7 +18,7 @@ func Run(elevUpdateCh <-chan types.ElevState,
 	orderUpdateCh chan<- types.Orders,
 	hallOrderCh <-chan types.HallOrder,
 	sendSyncCh <-chan bool,
-	startDoorTimerCh chan<- bool,
+	openDoorCh chan<- bool,
 ) {
 	bidTxCh := make(chan Msg[Bid])
 	bidTxBufCh := make(chan Msg[Bid])
@@ -34,8 +34,6 @@ func Run(elevUpdateCh <-chan types.ElevState,
 	bidMap := make(BidMap)
 
 	var peerList peers.PeerUpdate
-	var prevPeerList []string
-	var prevLostPeers []string
 	var atomicCounter atomic.Uint64
 
 	go bcast.Transmitter(config.BcastPort, bidTxCh, syncTxCh)
@@ -56,7 +54,6 @@ func Run(elevUpdateCh <-chan types.ElevState,
 		case elevUpdate := <-elevUpdateCh:
 			*elevator = elevUpdate
 
-
 		case hallOrder := <-hallOrderCh:
 			createHallOrder(
 				elevator,
@@ -69,14 +66,13 @@ func Run(elevUpdateCh <-chan types.ElevState,
 			)
 
 		case bidRx := <-bidRxBufCh:
-			switch bidRx.Type {
+			switch bidRx.Content.Type {
 			case BidInitial:
 				storeBid(bidRx, bidMap)
 				cost := timeToServeOrder(*elevator, bidRx.Content.Order)
 				bidEntry := Msg[Bid]{
 					SenderID: config.NodeID,
-					Type:     BidReply,
-					Content:  Bid{Order: bidRx.Content.Order, Cost: cost},
+					Content:  Bid{Type: BidReply, Order: bidRx.Content.Order, Cost: cost},
 				}
 				storeBid(bidEntry, bidMap)
 				bidTxBufCh <- bidEntry
@@ -105,7 +101,7 @@ func Run(elevUpdateCh <-chan types.ElevState,
 					// If we are on the same floor, only open the door
 					if elevator.Floor == bidRx.Content.Order.Floor {
 						elevator.Behaviour = types.DoorOpen
-						startDoorTimerCh <- true
+						openDoorCh <- true
 						continue
 					} // Else store the order
 					elevator.Orders[assignee][bidRx.Content.Order.Floor][bidRx.Content.Order.Button] = true
@@ -125,7 +121,7 @@ func Run(elevUpdateCh <-chan types.ElevState,
 					// On RestoreCabOrders, merge local cab orders with received cab orders
 					// Clear same floor immediately
 					if node == config.NodeID &&
-						syncRx.Type == RestoreCabOrders &&
+						syncRx.Content.Type == SyncCab &&
 						elevator.Floor != floor {
 						elevator.Orders[node][floor][btn] = elevator.Orders[node][floor][btn] ||
 							syncRx.Content.Orders[node][floor][btn]
@@ -142,8 +138,7 @@ func Run(elevUpdateCh <-chan types.ElevState,
 
 		case <-sendSyncCh:
 			syncTxBufCh <- Msg[Sync]{
-				Type:     SyncOrders,
-				Content:  Sync{Orders: elevator.Orders},
+				Content:  Sync{Type: SyncOrders, Orders: elevator.Orders},
 				SenderID: config.NodeID,
 			}
 
@@ -157,26 +152,25 @@ func Run(elevUpdateCh <-chan types.ElevState,
 				delete(bidMap, order)
 			}
 
-		case update := <-peerUpdateCh:
-			peerList.Peers = update.Peers
+		case peerUpdate := <-peerUpdateCh:
 			ownID := fmt.Sprintf("node-%d", config.NodeID)
-
-			if update.New == ownID || (slices.Contains(prevPeerList, ownID) && slices.Contains(update.Lost, ownID)) {
-				utils.PrintStatus(peerList)
+			// Print status on network init or network loss
+			if peerUpdate.New == ownID ||
+				(slices.Contains(peerList.Peers, ownID) && slices.Contains(peerUpdate.Lost, ownID)) {
+				utils.PrintStatus(peerUpdate)
 			}
 
-			// If we detect rising pulse from prevLostPeers to update.New, RestoreCabOrders
-			if slices.Contains(prevLostPeers, update.New) {
+			// If we detect change from prevLostPeers to update.New, RestoreCabOrders
+			if slices.Contains(peerList.Lost, peerUpdate.New) {
 				syncTxBufCh <- Msg[Sync]{
-					Type:     RestoreCabOrders,
-					Content:  Sync{Orders: elevator.Orders},
+					Content:  Sync{Type: SyncCab, Orders: elevator.Orders},
 					SenderID: config.NodeID,
 				}
 			}
 
-			// If a node goes from PeerUpdate.Peers to PeerUpdate.Lost, we overtake active hall orders
-			for _, lostPeer := range update.Lost {
-				if !slices.Contains(prevPeerList, lostPeer) {
+			// If a node goes from PeerUpdate.Peers to PeerUpdate.Lost, overtake active hall orders
+			for _, lostPeer := range peerUpdate.Lost {
+				if !slices.Contains(peerList.Peers, lostPeer) {
 					continue
 				}
 
@@ -198,13 +192,12 @@ func Run(elevUpdateCh <-chan types.ElevState,
 					}
 				})
 			}
-			prevPeerList = peerList.Peers
-			prevLostPeers = update.Lost
+			peerList = peerUpdate
 		}
 	}
 }
 
-// createHallOrder is called when a hall order is received, or if we need to overtake lost hall orders.
+// createHallOrder is called on: hall orders, overtake lost peers hall orders
 //   - If we are alone, take the order immediately.
 //   - Else, start a bidding timeout, store own bid, and send the bid to the network.
 func createHallOrder(
@@ -230,8 +223,7 @@ func createHallOrder(
 	cost := timeToServeOrder(*elevator, hallOrder)
 	bidEntry := Msg[Bid]{
 		SenderID: config.NodeID,
-		Type:     BidInitial,
-		Content:  Bid{Order: hallOrder, Cost: cost},
+		Content:  Bid{Type: BidInitial, Order: hallOrder, Cost: cost},
 	}
 	storeBid(bidEntry, bidMap)
 	// Attach the timer and timeout channel to the bid entry

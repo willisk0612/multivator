@@ -14,7 +14,7 @@ func Run(elevUpdateCh chan<- types.ElevState,
 	orderUpdateCh <-chan types.Orders,
 	hallOrderCh chan<- types.HallOrder,
 	sendSyncCh chan<- bool,
-	startDoorTimerCh <-chan bool,
+	openDoorCh <-chan bool,
 ) {
 	drvButtonsCh := make(chan types.ButtonEvent)
 	drvFloorsCh := make(chan int)
@@ -44,7 +44,7 @@ func Run(elevUpdateCh chan<- types.ElevState,
 					if btn != int(types.BT_Cab) {
 						elevio.SetButtonLamp(types.ButtonType(btn), floor, receivedOrder)
 					}
-					// Sync cab lights, orders are only present on network init
+					// Sync cab lights, orders only synced on network init
 					if config.NodeID == node &&
 						btn == int(types.BT_Cab) {
 						elevio.SetButtonLamp(types.BT_Cab, floor, receivedOrder)
@@ -111,7 +111,7 @@ func Run(elevUpdateCh chan<- types.ElevState,
 			elevUpdateCh <- *elevator
 			sendSyncCh <- true
 
-		case <-startDoorTimerCh:
+		case <-openDoorCh:
 			elevator.Behaviour = types.DoorOpen
 			elevio.SetDoorOpenLamp(true)
 			startDoorTimer(&doorTimer, doorTimeoutCh)

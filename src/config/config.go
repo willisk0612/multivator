@@ -17,6 +17,6 @@ const (
 	DoorOpenDuration = 3 * time.Second
 	TravelDuration   = 2 * time.Second
 	DirChangePenalty = 2 * time.Second
-	BcastPort        = 17400
-	PeersPort        = 17401
+	BcastPort        = 16400
+	PeersPort        = 17400
 )
