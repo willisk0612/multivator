@@ -13,16 +13,16 @@ import (
 //   - penalizes moving elevators, rewards door open elevators
 //   - uses recursive calls, and accumulates the duration for each floor
 func timeToServeOrder(elevator types.ElevState, btnEvent types.HallOrder) time.Duration {
-	elevator.Orders[config.NodeID][btnEvent.Floor][btnEvent.Button] = true
-	var duration time.Duration
 	if elevator.Obstructed {
-		duration = 100 * time.Second
-		return duration
+		return 100 * time.Second
 	}
+
+	var duration time.Duration
+	elevator.Orders[config.NodeID][btnEvent.Floor][btnEvent.Button] = true
 
 	switch elevator.Behaviour {
 	case types.Idle:
-		elevator.Dir = executor.ChooseDirection(elevator).Dir
+		elevator.Dir = executor.ChooseDirection(&elevator).Dir
 		if elevator.Dir == types.MD_Stop {
 			return duration
 		}
@@ -34,8 +34,8 @@ func timeToServeOrder(elevator types.ElevState, btnEvent types.HallOrder) time.D
 	}
 
 	for {
-		if executor.ShouldStopHere(elevator) {
-			shouldClear := executor.OrdersToClearHere(elevator)
+		if executor.ShouldStopHere(&elevator) {
+			shouldClear := executor.OrdersToClearHere(&elevator)
 
 			if btnEvent.Floor == elevator.Floor && shouldClear[btnEvent.Button] {
 				if duration < 0 {
@@ -44,13 +44,14 @@ func timeToServeOrder(elevator types.ElevState, btnEvent types.HallOrder) time.D
 				return duration
 			}
 
+			// Determine if the elevator should clear the orders at the current floor
 			for btn, clear := range shouldClear {
 				if clear {
 					elevator.Orders[config.NodeID][elevator.Floor][btn] = false
 				}
 			}
 			duration += config.DoorOpenDuration
-			elevator.Dir = executor.ChooseDirection(elevator).Dir
+			elevator.Dir = executor.ChooseDirection(&elevator).Dir
 		}
 
 		elevator.Floor += int(elevator.Dir)

@@ -48,15 +48,17 @@ func Run(elevUpdateCh <-chan types.ElevState,
 	go msgBufferRx(bidRxBufCh, bidRxCh, &atomicCounter)
 	go msgBufferRx(syncRxBufCh, syncRxCh, &atomicCounter)
 
-	elevator := <-elevUpdateCh
+	elevator := new(types.ElevState)
+	*elevator = <-elevUpdateCh
 
 	for {
 		select {
 		case elevUpdate := <-elevUpdateCh:
-			elevator = elevUpdate
+			*elevator = elevUpdate
+
 
 		case hallOrder := <-hallOrderCh:
-			elevator = createHallOrder(
+			createHallOrder(
 				elevator,
 				hallOrder,
 				bidMap,
@@ -70,7 +72,7 @@ func Run(elevUpdateCh <-chan types.ElevState,
 			switch bidRx.Type {
 			case BidInitial:
 				storeBid(bidRx, bidMap)
-				cost := timeToServeOrder(elevator, bidRx.Content.Order)
+				cost := timeToServeOrder(*elevator, bidRx.Content.Order)
 				bidEntry := Msg[Bid]{
 					SenderID: config.NodeID,
 					Type:     BidReply,
@@ -183,9 +185,8 @@ func Run(elevUpdateCh <-chan types.ElevState,
 					if node == lostPeerInt &&
 						btn != int(types.BT_Cab) &&
 						elevator.Orders[lostPeerInt][floor][btn] {
-
 						hallOrder := types.HallOrder{Floor: floor, Button: types.HallType(btn)}
-						elevator = createHallOrder(
+						createHallOrder(
 							elevator,
 							hallOrder,
 							bidMap,
@@ -207,18 +208,18 @@ func Run(elevUpdateCh <-chan types.ElevState,
 //   - If we are alone, take the order immediately.
 //   - Else, start a bidding timeout, store own bid, and send the bid to the network.
 func createHallOrder(
-	elevator types.ElevState,
+	elevator *types.ElevState,
 	hallOrder types.HallOrder,
 	bidMap BidMap,
 	peerList peers.PeerUpdate,
 	orderUpdateCh chan<- types.Orders,
 	bidTxBufCh chan<- Msg[Bid],
 	bidTimeoutCh chan<- types.HallOrder,
-) types.ElevState {
+) {
 	if len(peerList.Peers) < 2 {
 		elevator.Orders[config.NodeID][hallOrder.Floor][hallOrder.Button] = true
 		orderUpdateCh <- elevator.Orders
-		return elevator
+		return
 	}
 
 	// Start timeout timer for the bid
@@ -226,7 +227,7 @@ func createHallOrder(
 		bidTimeoutCh <- hallOrder
 	})
 
-	cost := timeToServeOrder(elevator, hallOrder)
+	cost := timeToServeOrder(*elevator, hallOrder)
 	bidEntry := Msg[Bid]{
 		SenderID: config.NodeID,
 		Type:     BidInitial,
@@ -240,8 +241,6 @@ func createHallOrder(
 	bidMap[hallOrder] = entry
 
 	bidTxBufCh <- bidEntry
-
-	return elevator
 }
 
 // storeBid is called on hall orders, initial bids, and reply bids.
