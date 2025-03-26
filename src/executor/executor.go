@@ -27,6 +27,8 @@ func Run(elevUpdateCh chan<- types.ElevState,
 	var doorTimer DoorTimer
 	doorTimer.timeoutCh = make(chan bool)
 
+	var lastBtnPressTime time.Time
+
 	port := config.PeersPort + config.NodeID
 	elevio.Init(fmt.Sprintf("localhost:%d", port), config.NumFloors)
 
@@ -62,6 +64,17 @@ func Run(elevUpdateCh chan<- types.ElevState,
 				elevUpdateCh <- *elevator
 				sendSyncCh <- true
 			} else {
+				// In case of hall order, set a minimum interval between button presses
+				// This is to ensure updated orders when calculating cost in dispatcher
+				elapsedTime := time.Since(lastBtnPressTime)
+				lastBtnPressTime = time.Now()
+				if elapsedTime < config.BtnPressInterval {
+					go func(order types.ButtonEvent) {
+						time.Sleep(config.BtnPressInterval-elapsedTime)
+						drvButtonsCh <- order
+					}(btn)
+					continue
+				}
 				elevUpdateCh <- *elevator
 				hallOrderCh <- types.HallOrder{
 					Floor:  btn.Floor,

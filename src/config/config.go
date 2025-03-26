@@ -13,6 +13,7 @@ const (
 	NumElevators     = 3
 	NumFloors        = 4
 	NumButtons       = 3
+	BtnPressInterval = 75 * time.Millisecond
 	SensorPollRate   = 25 * time.Millisecond
 	DoorOpenDuration = 3 * time.Second
 	TravelDuration   = 2 * time.Second
