@@ -13,7 +13,6 @@ const bufSize = 1024
 // Encodes received values from `chans` into type-tagged JSON, then broadcasts
 // it on `port`
 func Transmitter(port int, chans ...interface{}) {
-	//fmt.Println("Message detected in broadcaster")
 	checkArgs(chans...)
 	typeNames := make([]string, len(chans))
 	selectCases := make([]reflect.SelectCase, len(typeNames))
@@ -40,7 +39,10 @@ func Transmitter(port int, chans ...interface{}) {
 					"Either send smaller packets, or go to network/bcast/bcast.go and increase the buffer size",
 				len(ttj), bufSize, string(ttj)))
 		}
-		conn.WriteTo(ttj, addr)
+		_,err := conn.WriteTo(ttj, addr)
+		if err != nil {
+			fmt.Printf("bcast.Transmitter(%d, ...):WriteTo() failed: \"%+v\"\n", port, err)
+		}
 
 	}
 }
@@ -48,7 +50,6 @@ func Transmitter(port int, chans ...interface{}) {
 // Matches type-tagged JSON received on `port` to element types of `chans`, then
 // sends the decoded value on the corresponding channel
 func Receiver(port int, chans ...interface{}) {
-	//fmt.Println("Message detected in receiver")
 	checkArgs(chans...)
 	chansMap := make(map[string]interface{})
 	for _, ch := range chans {
@@ -64,13 +65,19 @@ func Receiver(port int, chans ...interface{}) {
 		}
 
 		var ttj typeTaggedJSON
-		json.Unmarshal(buf[0:n], &ttj)
+		err := json.Unmarshal(buf[0:n], &ttj)
+		if err != nil {
+			fmt.Printf("bcast.Receiver(%d, ...):json.Unmarshal() failed: \"%+v\"\n", port, e)
+		}
 		ch, ok := chansMap[ttj.TypeId]
 		if !ok {
 			continue
 		}
 		v := reflect.New(reflect.TypeOf(ch).Elem())
-		json.Unmarshal(ttj.JSON, v.Interface())
+		err = json.Unmarshal(ttj.JSON, v.Interface())
+		if err != nil {
+			fmt.Printf("bcast.Receiver(%d, ...):json.Unmarshal() failed: \"%+v\"\n", port, e)
+		}
 		reflect.Select([]reflect.SelectCase{{
 			Dir:  reflect.SelectSend,
 			Chan: reflect.ValueOf(ch),
