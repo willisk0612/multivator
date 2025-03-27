@@ -27,8 +27,6 @@ func Run(elevUpdateCh chan<- types.ElevState,
 	var doorTimer DoorTimer
 	doorTimer.timeoutCh = make(chan bool)
 
-	var lastBtnPressTime time.Time
-
 	port := config.PeersPort + config.NodeID
 	elevio.Init(fmt.Sprintf("localhost:%d", port), config.NumFloors)
 
@@ -53,7 +51,7 @@ func Run(elevUpdateCh chan<- types.ElevState,
 		case btn := <-drvButtonsCh:
 			if btn.Button == types.BT_Cab {
 				// If we are on the same floor, only open the door
-				if elevator.Floor == btn.Floor {
+				if elevator.Floor == btn.Floor && elevio.GetFloor() != -1 {
 					openDoor(elevator, doorTimer)
 					continue
 				}
@@ -64,18 +62,6 @@ func Run(elevUpdateCh chan<- types.ElevState,
 				elevUpdateCh <- *elevator
 				sendSyncCh <- true
 			} else {
-				// In case of hall order, set a minimum interval between button presses
-				// This is to ensure updated orders when calculating cost in dispatcher
-				elapsedTime := time.Since(lastBtnPressTime)
-				lastBtnPressTime = time.Now()
-				if elapsedTime < config.BtnPressInterval {
-					go func(order types.ButtonEvent) {
-						time.Sleep(config.BtnPressInterval-elapsedTime)
-						drvButtonsCh <- order
-					}(btn)
-					continue
-				}
-				elevUpdateCh <- *elevator
 				hallOrderCh <- types.HallOrder{
 					Floor:  btn.Floor,
 					Button: types.HallType(btn.Button),
@@ -136,7 +122,7 @@ func chooseAction(elevator *types.ElevState,
 	doorTimer DoorTimer,
 ) {
 	if elevator.Behaviour != types.Idle {
-		return
+		return // chooseAction will be called again when the elevator becomes idle
 	}
 	pair := ChooseDirection(elevator)
 	elevator.Behaviour = pair.Behaviour

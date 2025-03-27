@@ -57,12 +57,12 @@ func Run(elevUpdateCh <-chan types.ElevState,
 		case hallOrder := <-hallOrderCh:
 			createHallOrder(
 				elevator,
+				peerList,
 				hallOrder,
 				bidMap,
-				peerList,
-				orderUpdateCh,
 				bidTxBufCh,
 				bidTimeoutCh,
+				orderUpdateCh,
 			)
 
 		case bidRx := <-bidRxBufCh:
@@ -83,20 +83,13 @@ func Run(elevUpdateCh <-chan types.ElevState,
 			numBids := len(bidMap[bidRx.Content.Order].Costs)
 			numPeers := len(peerList.Peers)
 			if numBids == numPeers {
+				// All bids are received. Stop bid timer and find assignee
 				bidEntry := bidMap[bidRx.Content.Order]
 				if bidEntry.Timer != nil {
 					bidEntry.Timer.Stop()
 				}
 
-				lowestCost := 100 * time.Second
-				var assignee int
-				for nodeID, cost := range bidEntry.Costs {
-					if cost < lowestCost || (cost == lowestCost && nodeID < assignee) {
-						lowestCost = cost
-						assignee = nodeID
-					}
-				}
-
+				assignee := findAssignee(bidEntry)
 				if assignee == config.NodeID {
 					// If we are on the same floor, only open the door
 					if elevator.Floor == bidRx.Content.Order.Floor {
@@ -116,21 +109,18 @@ func Run(elevUpdateCh <-chan types.ElevState,
 		case syncRx := <-syncRxBufCh:
 			// Sync received orders
 			utils.ForEachOrder(syncRx.Content.Orders, func(node, floor, btn int) {
+				receivedOrder := syncRx.Content.Orders[node][floor][btn]
 				switch types.ButtonType(btn) {
-				case types.BT_Cab:
-					// On RestoreCabOrders, merge local cab orders with received cab orders
-					// Clear same floor immediately
-					if node == config.NodeID &&
-						syncRx.Content.Type == SyncCab &&
-						elevator.Floor != floor {
+				case types.BT_Cab: // Cab orders are merged
+					if node != config.NodeID {
+						elevator.Orders[node][floor][btn] = receivedOrder
+					} else if syncRx.Content.Type == SyncCab {
 						elevator.Orders[node][floor][btn] = elevator.Orders[node][floor][btn] ||
-							syncRx.Content.Orders[node][floor][btn]
-					} else if node != config.NodeID { // Only sync cab orders from other nodes
-						elevator.Orders[node][floor][btn] = syncRx.Content.Orders[node][floor][btn]
+							receivedOrder
 					}
 				default: // Hall orders are overwritten
 					if node != config.NodeID {
-						elevator.Orders[node][floor][btn] = syncRx.Content.Orders[node][floor][btn]
+						elevator.Orders[node][floor][btn] = receivedOrder
 					}
 				}
 			})
@@ -153,14 +143,15 @@ func Run(elevUpdateCh <-chan types.ElevState,
 			}
 
 		case peerUpdate := <-peerUpdateCh:
-			ownID := fmt.Sprintf("node-%d", config.NodeID)
+			//ownID := fmt.Sprintf("node-%d", config.NodeID)
 			// Print status on network init or network loss
-			if peerUpdate.New == ownID ||
-				(slices.Contains(peerList.Peers, ownID) && slices.Contains(peerUpdate.Lost, ownID)) {
-				utils.PrintStatus(peerUpdate)
-			}
+			// if peerUpdate.New == ownID ||
+			// 	slices.Contains(peerList.Peers, ownID) &&
+			// 		slices.Contains(peerUpdate.Lost, ownID) {
+			// 	utils.PrintStatus(peerUpdate)
+			// }
 
-			// If we detect change from prevLostPeers to update.New, RestoreCabOrders
+			// If we detect change from prevLostPeers to update.New, sync cab orders
 			if slices.Contains(peerList.Lost, peerUpdate.New) {
 				syncTxBufCh <- Msg[Sync]{
 					Content:  Sync{Type: SyncCab, Orders: elevator.Orders},
@@ -182,12 +173,12 @@ func Run(elevUpdateCh <-chan types.ElevState,
 						hallOrder := types.HallOrder{Floor: floor, Button: types.HallType(btn)}
 						createHallOrder(
 							elevator,
+							peerList,
 							hallOrder,
 							bidMap,
-							peerList,
-							orderUpdateCh,
 							bidTxBufCh,
 							bidTimeoutCh,
+							orderUpdateCh,
 						)
 					}
 				})
@@ -202,12 +193,12 @@ func Run(elevUpdateCh <-chan types.ElevState,
 //   - Else, start a bidding timeout, store own bid, and send the bid to the network.
 func createHallOrder(
 	elevator *types.ElevState,
+	peerList peers.PeerUpdate,
 	hallOrder types.HallOrder,
 	bidMap BidMap,
-	peerList peers.PeerUpdate,
-	orderUpdateCh chan<- types.Orders,
 	bidTxBufCh chan<- Msg[Bid],
 	bidTimeoutCh chan<- types.HallOrder,
+	orderUpdateCh chan<- types.Orders,
 ) {
 	if len(peerList.Peers) < 2 {
 		elevator.Orders[config.NodeID][hallOrder.Floor][hallOrder.Button] = true
@@ -248,4 +239,19 @@ func storeBid(msg Msg[Bid], bidMap BidMap) {
 	}
 	entry.Costs[msg.SenderID] = msg.Content.Cost
 	bidMap[order] = entry
+}
+
+// findAssignee is called when all bids are received.
+//   - Chooses the elevator with the lowest cost as the assignee.
+//   - In case of equal costs, the elevator with the lowest ID is chosen.
+func findAssignee(bidEntry BidMapValues) int {
+	lowestCost := 100 * time.Second
+	var assignee int
+	for nodeID, cost := range bidEntry.Costs {
+		if cost < lowestCost || (cost == lowestCost && nodeID < assignee) {
+			lowestCost = cost
+			assignee = nodeID
+		}
+	}
+	return assignee
 }
