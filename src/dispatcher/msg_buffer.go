@@ -13,7 +13,7 @@ import (
 func msgBufferTx[T MsgContent](
 	msgBufTxCh chan Msg[T],
 	msgTxCh chan Msg[T], atomicCounter *atomic.Uint64,
-	) {
+) {
 	for msgBufTx := range msgBufTxCh {
 		msgBufTx.Counter = atomicCounter.Add(1)
 		for range config.MsgRepetitions {
@@ -31,7 +31,7 @@ func msgBufferRx[T MsgContent](
 	msgBufRxCh chan Msg[T],
 	msgRxCh chan Msg[T],
 	atomicCounter *atomic.Uint64,
-	) {
+) {
 	seenMsgs := make(map[string]bool)
 	recentMsgIDs := make([]string, config.MsgRepetitions)
 	var nextIndex int

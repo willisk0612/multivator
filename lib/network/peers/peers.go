@@ -2,14 +2,12 @@ package peers
 
 import (
 	"fmt"
-	"multivator/lib/network/conn"
 	"net"
 	"sort"
 	"time"
-)
 
-const interval = 15 * time.Millisecond
-const timeout = 500 * time.Millisecond
+	"multivator/lib/network/conn"
+)
 
 type PeerUpdate struct {
 	Peers []string
@@ -17,8 +15,12 @@ type PeerUpdate struct {
 	Lost  []string
 }
 
-func Transmitter(port int, id string, transmitEnable <-chan bool) {
+const (
+	interval = 15 * time.Millisecond
+	timeout  = 500 * time.Millisecond
+)
 
+func Transmitter(port int, id string, transmitEnable <-chan bool) {
 	conn := conn.DialBroadcastUDP(port)
 	addr, _ := net.ResolveUDPAddr("udp4", fmt.Sprintf("255.255.255.255:%d", port))
 
@@ -37,10 +39,10 @@ func Transmitter(port int, id string, transmitEnable <-chan bool) {
 }
 
 func Receiver(port int, peerUpdateCh chan<- PeerUpdate) {
-
 	var buf [1024]byte
 	var p PeerUpdate
 	lastSeen := make(map[string]time.Time)
+	allLost := make(map[string]bool)
 
 	conn := conn.DialBroadcastUDP(port)
 
@@ -60,8 +62,8 @@ func Receiver(port int, peerUpdateCh chan<- PeerUpdate) {
 			if _, idExists := lastSeen[id]; !idExists {
 				p.New = id
 				updated = true
+				delete(allLost, id)
 			}
-
 			lastSeen[id] = time.Now()
 		}
 
@@ -70,15 +72,18 @@ func Receiver(port int, peerUpdateCh chan<- PeerUpdate) {
 		for k, v := range lastSeen {
 			if time.Since(v) > timeout {
 				updated = true
-				p.Lost = append(p.Lost, k)
+				allLost[k] = true
 				delete(lastSeen, k)
 			}
+		}
+
+		for k := range allLost {
+			p.Lost = append(p.Lost, k)
 		}
 
 		// Sending update
 		if updated {
 			p.Peers = make([]string, 0, len(lastSeen))
-
 			for k := range lastSeen {
 				p.Peers = append(p.Peers, k)
 			}

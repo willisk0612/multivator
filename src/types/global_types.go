@@ -3,11 +3,13 @@ package types
 import "multivator/src/config"
 
 type ElevState struct {
-	Floor      int
-	Orders     Orders
-	Dir        MotorDirection
-	Behaviour  ElevBehaviour
-	Obstructed bool
+	Floor         int
+	Orders        Orders
+	Dir           MotorDirection
+	Behaviour     ElevBehaviour
+	Obstructed    bool
+	IsStuck       bool
+	BetweenFloors bool
 }
 
 type Orders [config.NumElevators][config.NumFloors][config.NumButtons]bool

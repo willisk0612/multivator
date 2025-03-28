@@ -4,11 +4,12 @@ package elevio
 
 import (
 	"fmt"
-	"multivator/src/config"
-	"multivator/src/types"
 	"net"
 	"sync"
 	"time"
+
+	"multivator/src/config"
+	"multivator/src/types"
 )
 
 var (
@@ -62,7 +63,8 @@ func PollButtons(receiver chan<- types.ButtonEvent) {
 				if v != prev[f][b] && v {
 					receiver <- types.ButtonEvent{
 						Floor:  f,
-						Button: types.ButtonType(b)}
+						Button: types.ButtonType(b),
+					}
 				}
 				prev[f][b] = v
 			}

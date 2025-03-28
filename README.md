@@ -21,4 +21,14 @@ go run src/main.go --id 1
 
 ## Description
 
-The system uses a peer to peer topology. On hall orders, it computes a local cost and stores it in a map, and broadcasts a bid. Received bids are stored in the same map. Once the number of stored bids are equal to the number of elevators, the elevator takes the order if it has the lowest cost. It implements fault tolerant mechanisms such as restoring lost cab orders, overtaking of lost hall orders and a bid timeout mechanism.
+The system uses a peer to peer topology.
+
+On hall orders:
+  1. Executor receives button press and sends it to dispatcher
+  2. If we are alone, send the order back to executor. Else compute cost, store it in a map, and broadcast it as a bid. Also store received bids from other nodes.
+  3. Once number of stored bids are equal to number of connected peers, assign the order the the peer with the lowest bid. Send the order from the dispatcher back to the executor.
+
+Examples of fault tolerance mechanisms (assuming at least one peer is connected):
+  - Restore lost cab orders through the network.
+  - Overtake hall orders if an assigned peer disconnects.
+  - If all bids are not received within a specified time, assign the order to itself.

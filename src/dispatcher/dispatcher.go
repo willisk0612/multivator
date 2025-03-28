@@ -52,7 +52,14 @@ func Run(elevUpdateCh <-chan types.ElevState,
 	for {
 		select {
 		case elevUpdate := <-elevUpdateCh:
-			*elevator = elevUpdate
+			// Update everything except elevator.PrevOrder
+			elevator.Floor = elevUpdate.Floor
+			elevator.Orders = elevUpdate.Orders
+			elevator.Dir = elevUpdate.Dir
+			elevator.Behaviour = elevUpdate.Behaviour
+			elevator.Obstructed = elevUpdate.Obstructed
+			elevator.IsStuck = elevUpdate.IsStuck
+			elevator.BetweenFloors = elevUpdate.BetweenFloors
 
 		case hallOrder := <-hallOrderCh:
 			createHallOrder(
@@ -91,12 +98,18 @@ func Run(elevUpdateCh <-chan types.ElevState,
 
 				assignee := findAssignee(bidEntry)
 				if assignee == config.NodeID {
-					// If we are on the same floor, only open the door
-					if elevator.Floor == bidRx.Content.Order.Floor {
+					// If we are on the same floor in the correct direction, only open the door
+					order := bidRx.Content.Order
+					if elevator.Floor == order.Floor &&
+						(elevator.Dir == types.MD_Up && order.Button == types.HallUp ||
+						elevator.Dir == types.MD_Down && order.Button == types.HallDown) &&
+						!elevator.BetweenFloors &&
+						!elevator.IsStuck {
+
 						elevator.Behaviour = types.DoorOpen
 						openDoorCh <- true
 						continue
-					} // Else store the order
+					}
 					elevator.Orders[assignee][bidRx.Content.Order.Floor][bidRx.Content.Order.Button] = true
 					orderUpdateCh <- elevator.Orders
 				} else if bidEntry.Costs[assignee] != 0 {
@@ -110,17 +123,19 @@ func Run(elevUpdateCh <-chan types.ElevState,
 			// Sync received orders
 			utils.ForEachOrder(syncRx.Content.Orders, func(node, floor, btn int) {
 				receivedOrder := syncRx.Content.Orders[node][floor][btn]
-				switch types.ButtonType(btn) {
-				case types.BT_Cab: // Cab orders are merged
-					if node != config.NodeID {
-						elevator.Orders[node][floor][btn] = receivedOrder
-					} else if syncRx.Content.Type == SyncCab {
-						elevator.Orders[node][floor][btn] = elevator.Orders[node][floor][btn] ||
-							receivedOrder
-					}
-				default: // Hall orders are overwritten
-					if node != config.NodeID {
-						elevator.Orders[node][floor][btn] = receivedOrder
+				if elevator.Orders[node][floor][btn] != receivedOrder {
+					switch types.ButtonType(btn) {
+					case types.BT_Cab: // Cab orders from other elevators are overwritten
+						if node != config.NodeID {
+							elevator.Orders[node][floor][btn] = receivedOrder
+						} else if syncRx.Content.Type == SyncCab { // Own cab oders are merged
+							elevator.Orders[node][floor][btn] = elevator.Orders[node][floor][btn] ||
+								receivedOrder
+						}
+					default: // Hall orders are overwritten
+						if node != config.NodeID {
+							elevator.Orders[node][floor][btn] = receivedOrder
+						}
 					}
 				}
 			})
@@ -143,7 +158,7 @@ func Run(elevUpdateCh <-chan types.ElevState,
 			}
 
 		case peerUpdate := <-peerUpdateCh:
-			//ownID := fmt.Sprintf("node-%d", config.NodeID)
+			// ownID := fmt.Sprintf("node-%d", config.NodeID)
 			// Print status on network init or network loss
 			// if peerUpdate.New == ownID ||
 			// 	slices.Contains(peerList.Peers, ownID) &&
@@ -168,7 +183,7 @@ func Run(elevUpdateCh <-chan types.ElevState,
 				lostPeerInt, _ := strconv.Atoi(lostPeer[5:])
 				utils.ForEachOrder(elevator.Orders, func(node, floor, btn int) {
 					if node == lostPeerInt &&
-						btn != int(types.BT_Cab) &&
+						types.ButtonType(btn) != types.BT_Cab &&
 						elevator.Orders[lostPeerInt][floor][btn] {
 						hallOrder := types.HallOrder{Floor: floor, Button: types.HallType(btn)}
 						createHallOrder(

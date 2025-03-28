@@ -3,9 +3,10 @@ package bcast
 import (
 	"encoding/json"
 	"fmt"
-	"multivator/lib/network/conn"
 	"net"
 	"reflect"
+
+	"multivator/lib/network/conn"
 )
 
 const bufSize = 1024
@@ -39,7 +40,7 @@ func Transmitter(port int, chans ...interface{}) {
 					"Either send smaller packets, or go to network/bcast/bcast.go and increase the buffer size",
 				len(ttj), bufSize, string(ttj)))
 		}
-		_,err := conn.WriteTo(ttj, addr)
+		_, err := conn.WriteTo(ttj, addr)
 		if err != nil {
 			fmt.Printf("bcast.Transmitter(%d, ...):WriteTo() failed: \"%+v\"\n", port, err)
 		}

@@ -2,6 +2,7 @@ package executor
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	"multivator/lib/driver/elevio"
@@ -9,11 +10,6 @@ import (
 	"multivator/src/types"
 	"multivator/src/utils"
 )
-
-type DoorTimer struct {
-	timer     *time.Timer
-	timeoutCh chan bool
-}
 
 func Run(elevUpdateCh chan<- types.ElevState,
 	orderUpdateCh <-chan types.Orders,
@@ -24,18 +20,22 @@ func Run(elevUpdateCh chan<- types.ElevState,
 	drvButtonsCh := make(chan types.ButtonEvent)
 	drvFloorsCh := make(chan int)
 	drvObstrCh := make(chan bool)
-	var doorTimer DoorTimer
-	doorTimer.timeoutCh = make(chan bool)
+	drvStopCh := make(chan bool)
+	var doorTimer *time.Timer
+	doorTimeoutCh := make(chan bool)
+	var stuckTimer *time.Timer
+	stuckTimeoutCh := make(chan bool)
 
 	port := config.PeersPort + config.NodeID
 	elevio.Init(fmt.Sprintf("localhost:%d", port), config.NumFloors)
 
 	elevator := new(types.ElevState)
-	initElevPos(elevator)
+	initElevPos(elevator, &stuckTimer, stuckTimeoutCh)
 
 	go elevio.PollButtons(drvButtonsCh)
 	go elevio.PollFloorSensor(drvFloorsCh)
 	go elevio.PollObstructionSwitch(drvObstrCh)
+	go elevio.PollStopButton(drvStopCh)
 
 	elevUpdateCh <- *elevator
 
@@ -45,23 +45,38 @@ func Run(elevUpdateCh chan<- types.ElevState,
 		case receivedOrders := <-orderUpdateCh:
 			syncLights(elevator, receivedOrders)
 			elevator.Orders = receivedOrders
-			chooseAction(elevator, doorTimer)
+			chooseAction(elevator,
+				doorTimer,
+				doorTimeoutCh,
+				&stuckTimer,
+				stuckTimeoutCh,
+			)
 			elevUpdateCh <- *elevator
 
 		case btn := <-drvButtonsCh:
-			if btn.Button == types.BT_Cab {
-				// If we are on the same floor, only open the door
-				if elevator.Floor == btn.Floor && elevio.GetFloor() != -1 {
-					openDoor(elevator, doorTimer)
+			switch types.ButtonType(btn.Button) {
+			case types.BT_Cab:
+				// If we are on the same floor in the correct motor direction, only open the door
+				if elevator.Floor == btn.Floor && !elevator.BetweenFloors {
+					openDoor(
+						elevator,
+						&doorTimer,
+						doorTimeoutCh,
+					)
 					continue
 				}
 
 				elevator.Orders[config.NodeID][btn.Floor][btn.Button] = true
 				elevio.SetButtonLamp(types.BT_Cab, btn.Floor, true)
-				chooseAction(elevator, doorTimer)
+				chooseAction(elevator,
+					doorTimer,
+					doorTimeoutCh,
+					&stuckTimer,
+					stuckTimeoutCh,
+				)
 				elevUpdateCh <- *elevator
 				sendSyncCh <- true
-			} else {
+			default:
 				hallOrderCh <- types.HallOrder{
 					Floor:  btn.Floor,
 					Button: types.HallType(btn.Button),
@@ -70,32 +85,69 @@ func Run(elevUpdateCh chan<- types.ElevState,
 
 		case floor := <-drvFloorsCh:
 			elevator.Floor = floor
+			elevator.IsStuck = false
+			if stuckTimer != nil {
+				stuckTimer.Stop()
+			}
 			elevio.SetFloorIndicator(floor)
 
 			if ShouldStopHere(elevator) {
 				elevio.SetMotorDirection(types.MD_Stop)
+				elevator.BetweenFloors = false
 				clearAtCurrentFloor(elevator)
-				openDoor(elevator, doorTimer)
+				openDoor(elevator, &doorTimer, doorTimeoutCh)
 				elevUpdateCh <- *elevator
 				sendSyncCh <- true
 			}
 
-		case obstruction := <-drvObstrCh:
-			elevator.Obstructed = obstruction
-			openDoor(elevator, doorTimer)
-		case <-doorTimer.timeoutCh:
+		case isObstructed := <-drvObstrCh:
+			elevator.Obstructed = isObstructed
+			if elevator.Behaviour == types.DoorOpen || elevator.IsStuck {
+				openDoor(elevator, &doorTimer, doorTimeoutCh)
+
+				// Other elevator should overtake this elevators hall orders
+				if elevator.Obstructed {
+					giveHallOrders(elevator, hallOrderCh, elevUpdateCh)
+				}
+			}
+			elevUpdateCh <- *elevator
+		case <-doorTimeoutCh:
+			elevator.IsStuck = false
+			if stuckTimer != nil {
+				stuckTimer.Stop()
+			}
+
 			if elevator.Obstructed {
-				openDoor(elevator, doorTimer)
+				openDoor(elevator, &doorTimer, doorTimeoutCh)
 				continue
 			}
 			elevio.SetDoorOpenLamp(false)
 			elevator.Behaviour = types.Idle
-			chooseAction(elevator, doorTimer)
+			chooseAction(elevator,
+				doorTimer,
+				doorTimeoutCh,
+				&stuckTimer,
+				stuckTimeoutCh,
+			)
 			elevUpdateCh <- *elevator
 			sendSyncCh <- true
 
+		case <-stuckTimeoutCh:
+			log.Println("ELEVATOR STUCK")
+			elevator.IsStuck = true
+			elevator.Behaviour = types.Idle
+			if doorTimer != nil {
+				stuckTimer.Stop()
+			}
+			// Send active hall orders to dispatcher, remove them from this elevator
+			giveHallOrders(elevator, hallOrderCh, elevUpdateCh)
+
 		case <-openDoorCh:
-			openDoor(elevator, doorTimer)
+			openDoor(elevator, &doorTimer, doorTimeoutCh)
+
+		case <-drvStopCh:
+			elevio.SetMotorDirection(types.MD_Stop)
+			elevator.Behaviour = types.Idle
 		}
 	}
 }
@@ -103,9 +155,11 @@ func Run(elevUpdateCh chan<- types.ElevState,
 // initElevPos is called on startup.
 //   - If between floors, moves elevator down
 //   - If on floor, sets floor indicator
-func initElevPos(elevator *types.ElevState) {
+func initElevPos(elevator *types.ElevState, stuckTimer **time.Timer, stuckTimeoutCh chan<- bool) {
 	floor := elevio.GetFloor()
 	if floor == -1 {
+		elevator.BetweenFloors = true
+		resetTimer(stuckTimer, stuckTimeoutCh, config.StuckTimeout)
 		elevio.SetMotorDirection(types.MD_Down)
 		elevator.Behaviour = types.Moving
 		elevator.Dir = types.MD_Down
@@ -119,24 +173,53 @@ func initElevPos(elevator *types.ElevState) {
 //   - Moves elevator if we have orders in different floors
 //   - Opens door if we have orders here
 func chooseAction(elevator *types.ElevState,
-	doorTimer DoorTimer,
+	doorTimer *time.Timer,
+	doorTimeoutCh chan<- bool,
+	stuckTimer **time.Timer,
+	stuckTimeoutCh chan<- bool,
 ) {
 	if elevator.Behaviour != types.Idle {
 		return // chooseAction will be called again when the elevator becomes idle
 	}
 	pair := ChooseDirection(elevator)
 	elevator.Behaviour = pair.Behaviour
+	// If we are between floors, dont set elevator direction to stop
+	// This is because we use MDir to determine where the elevator is in ChooseDirection if we are stuck between floors
+	// chooseAction will be called again in case of a cab order
+	if elevator.BetweenFloors && pair.Dir == types.MD_Stop {
+		return
+	}
 	elevator.Dir = pair.Dir
 
 	switch pair.Behaviour {
 	case types.Moving:
+		elevator.BetweenFloors = true
 		elevio.SetMotorDirection(elevator.Dir)
+		resetTimer(stuckTimer, stuckTimeoutCh, config.StuckTimeout)
+
 	case types.DoorOpen:
 		clearAtCurrentFloor(elevator)
-		openDoor(elevator, doorTimer)
+		openDoor(elevator, &doorTimer, doorTimeoutCh)
 	default:
 		elevio.SetMotorDirection(types.MD_Stop)
 	}
+}
+
+// giveHallOrders is called on obstruction and stuck timeout.
+//   - Sends active hall orders to dispatcher and removes them from this elevator
+func giveHallOrders(elevator *types.ElevState, hallOrderCh chan<- types.HallOrder, elevUpdateCh chan<- types.ElevState) {
+	utils.ForEachOrder(elevator.Orders, func(node, floor, btn int) {
+		if node == config.NodeID &&
+			types.ButtonType(btn) != types.BT_Cab &&
+			elevator.Orders[node][floor][btn] {
+			elevator.Orders[node][floor][btn] = false
+			elevUpdateCh <- *elevator
+			hallOrderCh <- types.HallOrder{
+				Floor:  floor,
+				Button: types.HallType(btn),
+			}
+		}
+	})
 }
 
 // syncLights is called on order updates from dispatcher.
@@ -158,14 +241,31 @@ func syncLights(elevator *types.ElevState, receivedOrders types.Orders) {
 }
 
 // openDoor modifies elevator state, sets door lamp and starts the door timer
-func openDoor(elevator *types.ElevState, doorTimer DoorTimer) {
+//   - Uses a hardware check to avoid opening door between floors
+//   - Starts a stuck timer
+func openDoor(
+	elevator *types.ElevState,
+	doorTimer **time.Timer,
+	doorTimeoutCh chan<- bool,
+) {
+	if elevio.GetFloor() == -1 {
+		return
+	}
+
 	elevator.Behaviour = types.DoorOpen
 	elevio.SetDoorOpenLamp(true)
-	if doorTimer.timer != nil {
-		(doorTimer.timer).Reset(config.DoorOpenDuration)
+	if !elevator.Obstructed {
+		resetTimer(doorTimer, doorTimeoutCh, config.DoorOpenDuration)
+	}
+}
+
+// resetTimer resets the timer if it is not nil, otherwise creates a new timer
+func resetTimer(timer **time.Timer, timeoutCh chan<- bool, duration time.Duration) {
+	if *timer != nil {
+		(*timer).Reset(duration)
 	} else {
-		doorTimer.timer = time.AfterFunc(config.DoorOpenDuration, func() {
-			doorTimer.timeoutCh <- true
+		*timer = time.AfterFunc(duration, func() {
+			timeoutCh <- true
 		})
 	}
 }
