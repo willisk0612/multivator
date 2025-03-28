@@ -30,7 +30,7 @@ func timeToServeOrder(elevator types.ElevState, btnEvent types.HallOrder) time.D
 			return duration
 		}
 	case types.Moving:
-		duration += config.TravelDuration / 2 + config.DoorOpenDuration
+		duration += config.TravelDuration/2 + config.DoorOpenDuration
 		elevator.Floor += int(elevator.Dir)
 	case types.DoorOpen:
 		duration += config.DoorOpenDuration / 2

@@ -2,7 +2,6 @@ package executor
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"multivator/lib/driver/elevio"
@@ -20,7 +19,6 @@ func Run(elevUpdateCh chan<- types.ElevState,
 	drvButtonsCh := make(chan types.ButtonEvent)
 	drvFloorsCh := make(chan int)
 	drvObstrCh := make(chan bool)
-	drvStopCh := make(chan bool)
 	var doorTimer *time.Timer
 	doorTimeoutCh := make(chan bool)
 	var stuckTimer *time.Timer
@@ -35,7 +33,6 @@ func Run(elevUpdateCh chan<- types.ElevState,
 	go elevio.PollButtons(drvButtonsCh)
 	go elevio.PollFloorSensor(drvFloorsCh)
 	go elevio.PollObstructionSwitch(drvObstrCh)
-	go elevio.PollStopButton(drvStopCh)
 
 	elevUpdateCh <- *elevator
 
@@ -104,19 +101,12 @@ func Run(elevUpdateCh chan<- types.ElevState,
 			elevator.Obstructed = isObstructed
 			if elevator.Behaviour == types.DoorOpen || elevator.IsStuck {
 				openDoor(elevator, &doorTimer, doorTimeoutCh)
-
-				// Other elevator should overtake this elevators hall orders
 				if elevator.Obstructed {
 					giveHallOrders(elevator, hallOrderCh, elevUpdateCh)
 				}
 			}
 			elevUpdateCh <- *elevator
 		case <-doorTimeoutCh:
-			elevator.IsStuck = false
-			if stuckTimer != nil {
-				stuckTimer.Stop()
-			}
-
 			if elevator.Obstructed {
 				openDoor(elevator, &doorTimer, doorTimeoutCh)
 				continue
@@ -133,21 +123,16 @@ func Run(elevUpdateCh chan<- types.ElevState,
 			sendSyncCh <- true
 
 		case <-stuckTimeoutCh:
-			log.Println("ELEVATOR STUCK")
 			elevator.IsStuck = true
 			elevator.Behaviour = types.Idle
 			if doorTimer != nil {
 				stuckTimer.Stop()
 			}
-			// Send active hall orders to dispatcher, remove them from this elevator
 			giveHallOrders(elevator, hallOrderCh, elevUpdateCh)
 
 		case <-openDoorCh:
 			openDoor(elevator, &doorTimer, doorTimeoutCh)
-
-		case <-drvStopCh:
-			elevio.SetMotorDirection(types.MD_Stop)
-			elevator.Behaviour = types.Idle
+			elevUpdateCh <- *elevator
 		}
 	}
 }
@@ -183,12 +168,6 @@ func chooseAction(elevator *types.ElevState,
 	}
 	pair := ChooseDirection(elevator)
 	elevator.Behaviour = pair.Behaviour
-	// If we are between floors, dont set elevator direction to stop
-	// This is because we use MDir to determine where the elevator is in ChooseDirection if we are stuck between floors
-	// chooseAction will be called again in case of a cab order
-	if elevator.BetweenFloors && pair.Dir == types.MD_Stop {
-		return
-	}
 	elevator.Dir = pair.Dir
 
 	switch pair.Behaviour {
@@ -232,7 +211,7 @@ func syncLights(elevator *types.ElevState, receivedOrders types.Orders) {
 			if btn != int(types.BT_Cab) {
 				elevio.SetButtonLamp(types.ButtonType(btn), floor, receivedOrders[node][floor][btn])
 			}
-			// Sync cab lights
+			// Sync cab lights for own orders
 			if btn == int(types.BT_Cab) && node == config.NodeID {
 				elevio.SetButtonLamp(types.BT_Cab, floor, receivedOrders[node][floor][btn])
 			}
@@ -242,7 +221,6 @@ func syncLights(elevator *types.ElevState, receivedOrders types.Orders) {
 
 // openDoor modifies elevator state, sets door lamp and starts the door timer
 //   - Uses a hardware check to avoid opening door between floors
-//   - Starts a stuck timer
 func openDoor(
 	elevator *types.ElevState,
 	doorTimer **time.Timer,

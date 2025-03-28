@@ -52,14 +52,7 @@ func Run(elevUpdateCh <-chan types.ElevState,
 	for {
 		select {
 		case elevUpdate := <-elevUpdateCh:
-			// Update everything except elevator.PrevOrder
-			elevator.Floor = elevUpdate.Floor
-			elevator.Orders = elevUpdate.Orders
-			elevator.Dir = elevUpdate.Dir
-			elevator.Behaviour = elevUpdate.Behaviour
-			elevator.Obstructed = elevUpdate.Obstructed
-			elevator.IsStuck = elevUpdate.IsStuck
-			elevator.BetweenFloors = elevUpdate.BetweenFloors
+			*elevator = elevUpdate
 
 		case hallOrder := <-hallOrderCh:
 			createHallOrder(
@@ -102,11 +95,10 @@ func Run(elevUpdateCh <-chan types.ElevState,
 					order := bidRx.Content.Order
 					if elevator.Floor == order.Floor &&
 						(elevator.Dir == types.MD_Up && order.Button == types.HallUp ||
-						elevator.Dir == types.MD_Down && order.Button == types.HallDown) &&
+							elevator.Dir == types.MD_Down && order.Button == types.HallDown) &&
 						!elevator.BetweenFloors &&
 						!elevator.IsStuck {
 
-						elevator.Behaviour = types.DoorOpen
 						openDoorCh <- true
 						continue
 					}
@@ -128,7 +120,7 @@ func Run(elevUpdateCh <-chan types.ElevState,
 					case types.BT_Cab: // Cab orders from other elevators are overwritten
 						if node != config.NodeID {
 							elevator.Orders[node][floor][btn] = receivedOrder
-						} else if syncRx.Content.Type == SyncCab { // Own cab oders are merged
+						} else if syncRx.Content.Type == SyncCab { // Own cab oders are merged on SyncCab, which is received on network init
 							elevator.Orders[node][floor][btn] = elevator.Orders[node][floor][btn] ||
 								receivedOrder
 						}
@@ -158,13 +150,13 @@ func Run(elevUpdateCh <-chan types.ElevState,
 			}
 
 		case peerUpdate := <-peerUpdateCh:
-			// ownID := fmt.Sprintf("node-%d", config.NodeID)
+			ownID := fmt.Sprintf("node-%d", config.NodeID)
 			// Print status on network init or network loss
-			// if peerUpdate.New == ownID ||
-			// 	slices.Contains(peerList.Peers, ownID) &&
-			// 		slices.Contains(peerUpdate.Lost, ownID) {
-			// 	utils.PrintStatus(peerUpdate)
-			// }
+			if peerUpdate.New == ownID ||
+				slices.Contains(peerList.Peers, ownID) &&
+					slices.Contains(peerUpdate.Lost, ownID) {
+				utils.PrintStatus(peerUpdate)
+			}
 
 			// If we detect change from prevLostPeers to update.New, sync cab orders
 			if slices.Contains(peerList.Lost, peerUpdate.New) {
@@ -180,6 +172,7 @@ func Run(elevUpdateCh <-chan types.ElevState,
 					continue
 				}
 
+				// Get the last digit of node-<digit> to get the node ID integer
 				lostPeerInt, _ := strconv.Atoi(lostPeer[5:])
 				utils.ForEachOrder(elevator.Orders, func(node, floor, btn int) {
 					if node == lostPeerInt &&

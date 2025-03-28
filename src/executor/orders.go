@@ -8,7 +8,6 @@ import (
 
 // ChooseDirection is called in chooseAction and in cost function.
 //   - The algorithm prioritizes hall orders in the same direction as the elevator.
-//   - If the elevator is between floors with ordersHere, it will choose the opposite direction.
 func ChooseDirection(elevator *types.ElevState) types.DirnBehaviourPair {
 	switch elevator.Dir {
 	case types.MD_Up:
@@ -16,9 +15,6 @@ func ChooseDirection(elevator *types.ElevState) types.DirnBehaviourPair {
 		case ordersAbove(elevator):
 			return types.DirnBehaviourPair{Dir: types.MD_Up, Behaviour: types.Moving}
 		case ordersHere(elevator):
-			if elevator.BetweenFloors {
-				return types.DirnBehaviourPair{Dir: types.MD_Down, Behaviour: types.Moving}
-			}
 			return types.DirnBehaviourPair{Dir: types.MD_Down, Behaviour: types.DoorOpen}
 		case ordersBelow(elevator):
 			return types.DirnBehaviourPair{Dir: types.MD_Down, Behaviour: types.Moving}
@@ -30,9 +26,6 @@ func ChooseDirection(elevator *types.ElevState) types.DirnBehaviourPair {
 		case ordersBelow(elevator):
 			return types.DirnBehaviourPair{Dir: types.MD_Down, Behaviour: types.Moving}
 		case ordersHere(elevator):
-			if elevator.BetweenFloors {
-				return types.DirnBehaviourPair{Dir: types.MD_Up, Behaviour: types.Moving}
-			}
 			return types.DirnBehaviourPair{Dir: types.MD_Up, Behaviour: types.DoorOpen}
 		case ordersAbove(elevator):
 			return types.DirnBehaviourPair{Dir: types.MD_Up, Behaviour: types.Moving}
@@ -114,8 +107,6 @@ func clearAtCurrentFloor(elevator *types.ElevState) {
 		}
 	}
 }
-
-// Helper functions for orders.go
 
 func hasOrders(elevator *types.ElevState, startFloor int, endFloor int) bool {
 	for floor := startFloor; floor < endFloor; floor++ {
